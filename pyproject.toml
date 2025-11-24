@@ -131,7 +131,7 @@ geobenchv2 = [
 
 vllm = [
   "geobenchv2==0.9",
-  "vllm==0.11.0",
+  "vllm==0.11.2",
 ]
 
 vllm_test = [
