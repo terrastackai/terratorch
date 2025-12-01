@@ -196,7 +196,7 @@ class GenericMultiModalDataModule(NonGeoDataModule):
         rgb_indices: list[int] | None = None,
         allow_substring_file_names: bool = True,
         class_names: list[str] | None = None,
-        constant_scale: dict[float] = None,
+        constant_scale: dict[str, float] = None,
         train_transform: dict | A.Compose | None | list[A.BasicTransform] = None,
         val_transform: dict | A.Compose | None | list[A.BasicTransform] = None,
         test_transform: dict | A.Compose | None | list[A.BasicTransform] = None,
@@ -283,7 +283,7 @@ class GenericMultiModalDataModule(NonGeoDataModule):
                 If True and no split file is provided, considers the file stem as prefix, otherwise the full file name.
                 Defaults to True.
             class_names (list[str], optional): Names of the classes. Defaults to None.
-            constant_scale (dict[float]): Factor to multiply data values by, provided as a dictionary with modalities as
+            constant_scale (dict[str, float]): Factor to multiply data values by, provided as a dictionary with modalities as
                 keys. Can be subset of all modalities. Defaults to None.
             train_transform (Albumentations.Compose | dict | None): Albumentations transform to be applied to all image
                 modalities. Should end with ToTensorV2() and not include normalization. The transform is not applied to 

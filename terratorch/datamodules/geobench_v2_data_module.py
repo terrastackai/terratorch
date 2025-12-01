@@ -25,7 +25,8 @@ from kornia.augmentation._2d.geometric.base import GeometricAugmentationBase2D
 from kornia.augmentation._2d.intensity.base import IntensityAugmentationBase2D
 import torch.nn as nn
 from terratorch.datasets.transforms import kornia_augmentations_to_callable_with_dict
-
+import torch
+from einops import rearrange
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from torchgeo.datasets.utils import percentile_normalization, lazy_import
@@ -557,8 +558,91 @@ class GeoBenchV2SegmentationDataModule(GeoBenchSegmentationDataModule):
     def _valid_attribute(self, *args: str):
         return self._proxy._valid_attribute(args)
 
-    def plot(self, batch, split: str = "val"):
-        return self._proxy.visualize_batch(batch = batch, split = split)
+    def plot(
+        self, batch: dict[str, Any] | None = None, split: str = "train"
+    ) -> tuple[Any, dict[str, Any]]:
+        """Visualize a batch of data with output.
+
+        Args:
+            batch: Optional batch of data. If not provided, a batch will be fetched from the dataloader.
+            split: One of 'train', 'validation', 'test'
+
+        Returns:
+            The matplotlib figure and the batch of data
+        """
+        if batch is None:
+            if split == "train":
+                batch = next(iter(self.train_dataloader()))
+            elif split == "validation":
+                batch = next(iter(self.val_dataloader()))
+            else:
+                batch = next(iter(self.test_dataloader()))
+
+        if hasattr(self._proxy.data_normalizer, "unnormalize"):
+            batch = self._proxy.data_normalizer.unnormalize(batch)
+
+        try:
+            masks = batch["mask"]
+            images = batch["image"]
+            if isinstance(images, dict):
+                for k in images:
+                    print(f'{k=} {v.shape=}')
+                images = next(iter(images.values())) 
+            prediction = batch["prediction"] if "prediction" in batch else None
+            if prediction is not None:
+                num_cols = 3
+            else:
+                num_cols = 2
+    
+            n_samples = images.shape[0]
+            n_samples = min(3, n_samples)
+            indices = torch.randperm(n_samples)[:n_samples]
+    
+            images = images[indices]
+            masks = masks[indices] if masks.dim()>2 else masks
+    
+            plot_bands = self._proxy.dataset_band_config.plot_bands
+            rgb_indices = [0,1,2]
+            if images.dim() == 4:
+                images = images[:, rgb_indices, :, :]
+            elif images.dim() == 3:
+                images = images[rgb_indices, :, :]
+            else: #if multi-temporal choose first timestamp
+                images = images[:, rgb_indices, 0, :, :]
+    
+            fig, axes = plt.subplots(n_samples, num_cols, figsize=(12, 3 * n_samples))
+            if n_samples == 1:
+                axes = axes.reshape(1, -1)
+    
+            for i in range(n_samples):
+                ax = axes[i, 0]
+                img = images[i] if images.dim()>3 else images
+                img = rearrange(img, "c h w -> h w c").cpu().numpy()
+                img = percentile_normalization(img, lower=2, upper=98)
+                ax.imshow(img)
+                ax.set_title("image")
+                ax.axis("off")
+    
+                ax = axes[i, 1]
+                mask_img = masks[i] if masks.dim()>2 else masks
+                mask_img = mask_img.cpu().numpy()
+                ax.imshow(mask_img)
+                ax.set_title("mask" if i == 0 else "")
+                ax.axis("off")
+    
+                if prediction is not None:
+                    ax = axes[i, 2]
+                    prediction_img = prediction[i] if masks.dim()>2 else prediction
+                    prediction_img = prediction_img.cpu().numpy()
+                    ax.imshow(prediction_img)
+                    ax.set_title("prediction" if i == 0 else "")
+                    ax.axis("off")
+    
+            plt.tight_layout()
+            return fig
+        except Exception as e:
+            print(e)
+            return None
 
 
 

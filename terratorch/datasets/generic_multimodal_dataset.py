@@ -583,7 +583,7 @@ class GenericMultimodalSegmentationDataset(GenericMultimodalDataset):
             output_bands (dict[list], optional): Bands that should be output by the dataset as named by dataset_bands,
                 provided as a dictionary with modality keys. Can be subset of all modalities. Defaults to None.
             class_names (list[str], optional): Names of the classes. Defaults to None.
-            constant_scale (dict[float]): Factor to multiply data values by, provided as a dictionary with modalities as
+            constant_scale (dict[str, float]): Factor to multiply data values by, provided as a dictionary with modalities as
                 keys. Can be subset of all modalities. Defaults to None.
             transform (Albumentations.Compose | dict | None): Albumentations transform to be applied to all image
                 modalities (transformation are shared between image modalities, e.g., similar crop or rotation).
@@ -746,7 +746,7 @@ class GenericMultimodalPixelwiseRegressionDataset(GenericMultimodalDataset):
         allow_substring_file_names: bool = False,
         dataset_bands: dict[list] | None = None,
         output_bands: dict[list] | None = None,
-        constant_scale: dict[float] = 1.0,
+        constant_scale: dict[str, float] = 1.0,
         transform: A.Compose | dict | None = None,
         no_data_replace: float | None = None,
         no_label_replace: float | None = None,

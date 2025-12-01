@@ -106,23 +106,6 @@ pip install -e .
 ```
 To install terratorch with partial (work in development) support for Weather Foundation Models, `pip install -e .[wxc]`, which currently works just for `Python >= 3.11`. 
 
-### Podman
-To run the tests inside a container environment, proceed in the following way:
-
-* Install `podman` in your system.
-* Building the base images:
-```
-./run_base_images_build.sh 
-```
-* Building the pytest images:
-```
-./run_pytest_images_build.sh
-```
-* Running the tests inside each environment:
-```
-./run_tests_container.sh 
-```
-
 ## Documentation
 
 To get started, check out the [quick start guide](https://terrastackai.github.io/terratorch/quick_start).
