@@ -38,6 +38,8 @@ from terratorch.tasks import InferenceTask
         "encoderdecoder_clay_v1_base_model_factory",
         "encoderdecoder_timm_convnext_large-fb-in22k_model_factory",
         "encoderdecoder_timm_convnext_xlarge-fb-in22k_model_factory",
+        "terramind_base",
+        "terramind_large"
     ],
 )
 def test_models_fit(model_name):
@@ -161,6 +163,20 @@ def test_buildings_predict(buildings_image, model_name):
     checkpoint_path = f"/dccstor/terratorch/shared/integrationtests/testing_models/buildings_{model_name}/checkpoint_{model_name}.ckpt"
 
     preds = run_inference(config=config_path, checkpoint=checkpoint_path, image=buildings_image)
+
+    assert isinstance(preds, torch.Tensor), f"Expected predictions to be type torch.Tensor, got {type(preds)}"
+
+    gc.collect()
+
+@pytest.mark.parametrize("model_name", ["terramind_base"])
+def test_floods_predict(floods_image, model_name):
+    # Terramind models trained with tt version==1.1
+    config_path = (
+        f"/dccstor/terratorch/shared/integrationtests/testing_models/floods_{model_name}/config_{model_name}.yaml"
+    )
+    checkpoint_path = f"/dccstor/terratorch/shared/integrationtests/testing_models/floods_{model_name}/checkpoint_{model_name}.ckpt"
+
+    preds = run_inference(config=config_path, checkpoint=checkpoint_path, image=floods_image)
 
     assert isinstance(preds, torch.Tensor), f"Expected predictions to be type torch.Tensor, got {type(preds)}"
 
@@ -308,6 +324,25 @@ def test_current_terratorch_version_buildings_predict(config_name, buildings_ima
     assert isinstance(preds, torch.Tensor), f"Expected predictions to be type torch.Tensor, got {type(preds)}"
 
     gc.collect()
+
+@pytest.mark.parametrize("config_name", [ "terramind_base","terramind_large"])
+def test_current_terratorch_version_floods_predict(config_name, floods_image):
+    # Models trained with current terratorch version
+    config_path = f"/dccstor/terratorch/tmp/{config_name}/lightning_logs/version_0/config_deploy.yaml"
+
+    pattern = os.path.join(f"/dccstor/terratorch/tmp/{config_name}/", "best-state_dict-epoch=*.ckpt")
+    checkpoint_path = glob.glob(pattern)[0]
+
+    # deploy_config_path = create_deploy_config(config_path)
+    # ToDo: Remove after updating terratorch version and running fine-tune tests again.
+    # update_grep_config_in_file(config_path=config_path, new_img_pattern="*.tif*")
+
+    preds = run_inference(config=config_path, checkpoint=checkpoint_path, image=floods_image)
+
+    assert isinstance(preds, torch.Tensor), f"Expected predictions to be type torch.Tensor, got {type(preds)}"
+
+    gc.collect()
+
 
 
 @pytest.mark.parametrize(

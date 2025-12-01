@@ -23,7 +23,7 @@ from box import Box
 from terratorch.models.backbones.clay_v15.model import ClayMAE
 
 PIXEL_WISE_TASKS = ["segmentation", "regression"]
-SCALAR_TASKS = ["classification"]
+SCALAR_TASKS = ["classification", "image_level_regression"]
 SUPPORTED_TASKS = PIXEL_WISE_TASKS + SCALAR_TASKS
 
 

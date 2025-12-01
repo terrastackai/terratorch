@@ -21,7 +21,7 @@ from terratorch.models.utils import DecoderNotFoundError, extract_prefix_keys
 from terratorch.registry import MODEL_FACTORY_REGISTRY
 
 PIXEL_WISE_TASKS = ["segmentation", "regression"]
-SCALAR_TASKS = ["classification"]
+SCALAR_TASKS = ["classification", "image_level_regression"]
 SUPPORTED_TASKS = PIXEL_WISE_TASKS + SCALAR_TASKS
 
 

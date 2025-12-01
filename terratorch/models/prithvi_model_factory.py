@@ -15,7 +15,7 @@ from terratorch.models.model import (
 from terratorch.registry import MODEL_FACTORY_REGISTRY
 
 PIXEL_WISE_TASKS = ["segmentation", "regression"]
-SCALAR_TASKS = ["classification"]
+SCALAR_TASKS = ["classification", "image_level_regression"]
 SUPPORTED_TASKS = PIXEL_WISE_TASKS + SCALAR_TASKS
 
 

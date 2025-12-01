@@ -436,3 +436,269 @@ class PixelwiseRegressionTask(TerraTorchTask):
         else:
             y_hat: Tensor = self(x, **rest).output
         return y_hat, file_names
+
+class ImageLevelRegressionTask(TerraTorchTask):
+    """Image Level Regression Task that accepts models from a range of sources.
+
+    This task performs regression on the whole image level.
+    It predicts one or multiple scalar values per image (e.g. a set of soil properties).
+    
+
+    Args:
+        model_args (dict): Arguments passed to the model factory.
+        model_factory (str | None): Name of ModelFactory class to be used to instantiate the model.
+            Is ignored when model is provided.
+        model (torch.nn.Module | None): Custom model.
+        loss (str | list[str] | dict[str, float]): Loss to be used. Currently supports 
+            'mse', 'rmse', 'mae', or 'huber'. Defaults to "mse".
+        aux_heads (list[AuxiliaryHead] | None): Auxiliary heads to be attached to the model.
+        aux_loss (dict[str, float] | None): Auxiliary loss weights.
+        class_weights (list[float] | None): (Kept for interface consistency) List of class weights.
+        ignore_index (int | None): Label to ignore in the loss computation. Defaults to None.
+        lr (float): Learning rate to be used. Defaults to 0.001.
+        optimizer (str | None): Name of optimizer class from torch.optim.
+        optimizer_hparams (dict | None): Parameters for the optimizer.
+        scheduler (str | None): Name of scheduler class.
+        scheduler_hparams (dict | None): Parameters for the scheduler.
+        freeze_backbone (bool): Whether to freeze the backbone. Defaults to False.
+        freeze_decoder (bool): Whether to freeze the decoder. Defaults to False.
+        freeze_head (bool): Whether to freeze the regression head. Defaults to False.
+        plot_on_val (bool | int): Whether to plot visualizations on validation. 
+        test_dataloaders_names (list[str] | None): Names for multiple test dataloaders.
+        path_to_record_metrics (str): Path to save metrics log.
+    """
+
+    def __init__(
+        self,
+        model_args: dict,
+        model_factory: str | None = None,
+        model: torch.nn.Module | None = None,
+        loss: str | list[str] | dict[str, float] = "mse",
+        aux_heads: list[AuxiliaryHead] | None = None,
+        aux_loss: dict[str, float] | None = None,
+        class_weights: list[float] | None = None,
+        ignore_index: int | None = None,
+        lr: float = 0.001,
+        # Optimizer/Scheduler args are optional
+        optimizer: str | None = None,
+        optimizer_hparams: dict | None = None,
+        scheduler: str | None = None,
+        scheduler_hparams: dict | None = None,
+        # Freezing
+        freeze_backbone: bool = False,
+        freeze_decoder: bool = False,
+        freeze_head: bool = False,
+        # Misc
+        plot_on_val: bool | int = 10,
+        test_dataloaders_names: list[str] | None = None,
+        lr_overrides: dict[str, float] | None = None,
+        path_to_record_metrics: str = None,
+    ) -> None:
+        
+        self.aux_loss = aux_loss
+        self.aux_heads = aux_heads
+
+        if model is not None and model_factory is not None:
+            logger.warning("A model_factory and a model was provided. The model_factory is ignored.")
+        if model is None and model_factory is None:
+            raise ValueError("A model_factory or a model (torch.nn.Module) must be provided.")
+
+        if model_factory and model is None:
+            self.model_factory = MODEL_FACTORY_REGISTRY.build(model_factory)
+
+        super().__init__(
+            task="image_level_regression",
+            path_to_record_metrics=path_to_record_metrics
+        )
+
+        if model:
+            self.model = model
+
+        self.train_loss_handler = LossHandler(self.train_metrics.prefix)
+        self.test_loss_handler: list[LossHandler] = []
+        for metrics in self.test_metrics:
+            self.test_loss_handler.append(LossHandler(metrics.prefix))
+        self.val_loss_handler = LossHandler(self.val_metrics.prefix)
+        
+        self.monitor = f"{self.val_metrics.prefix}loss"
+        self.plot_on_val = int(plot_on_val)
+
+    def configure_losses(self) -> None:
+        """Initialize the loss criterion.
+
+        Raises:
+            ValueError: If *loss* is invalid.
+        """
+        loss = self.hparams["loss"]
+        ignore_index = self.hparams["ignore_index"]
+
+        if isinstance(loss, str):
+            self.criterion = init_loss(loss, ignore_index=ignore_index)
+        elif isinstance(loss, nn.Module):
+            self.criterion = loss
+        elif isinstance(loss, list):
+            losses = {l: init_loss(l, ignore_index=ignore_index) for l in loss}
+            self.criterion = CombinedLoss(losses=losses)
+        elif isinstance(loss, dict):
+            loss_names, weights = list(loss.keys()), list(loss.values())
+            losses = {l: init_loss(l, ignore_index=ignore_index) for l in loss_names}
+            self.criterion = CombinedLoss(losses=losses, weight=weights)
+        else:
+            raise ValueError(f"The loss type {loss} isn't supported.")
+
+    def configure_metrics(self) -> None:
+        """Initialize the performance metrics."""
+        
+        def instantiate_metrics():
+            return {
+                "RMSE": MeanSquaredError(squared=False),
+                "MSE": MeanSquaredError(squared=True),
+                "MAE": MeanAbsoluteError(),
+                "R2_Score": R2Score(),
+            }
+
+        def wrap_metrics(metrics):
+            if self.hparams["ignore_index"] is not None:
+                return {
+                    name: IgnoreIndexMetricWrapper(metric, ignore_index=self.hparams["ignore_index"])
+                    for name, metric in metrics.items()
+                }
+            return metrics
+
+        metrics_dict = wrap_metrics(instantiate_metrics())
+
+        self.train_metrics = MetricCollection(metrics_dict, prefix="train/")
+        self.val_metrics = MetricCollection(metrics_dict, prefix="val/")
+        
+        if self.hparams["test_dataloaders_names"] is not None:
+            self.test_metrics = nn.ModuleList(
+                [
+                    MetricCollection(metrics_dict, prefix=f"test/{dl_name}/")
+                    for dl_name in self.hparams["test_dataloaders_names"]
+                ]
+            )
+        else:
+            self.test_metrics = nn.ModuleList(
+                [MetricCollection(metrics_dict, prefix="test/")]
+            )
+
+    def training_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Tensor:
+        
+        """Compute the train loss and additional metrics.
+
+        Args:
+            batch: The output of your DataLoader.
+            batch_idx: Integer displaying index of this batch.
+            dataloader_idx: Index of the current dataloader.
+        """
+        x = batch["image"]
+        y = batch["label"] 
+        other_keys = batch.keys() - {"image", "label", "filename"}
+        rest = {k: batch[k] for k in other_keys}
+        
+        model_output: ModelOutput = self(x, **rest)
+        loss = self.train_loss_handler.compute_loss(model_output, y, self.criterion, self.aux_loss)
+        self.train_loss_handler.log_loss(self.log, loss_dict=loss, batch_size=y.shape[0])
+        
+        y_hat = model_output.output
+        self.train_metrics.update(y_hat, y)
+
+        return loss["loss"]
+
+    def validation_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> None:
+        
+        """Compute the validation loss and additional metrics.
+
+        Args:
+            batch: The output of your DataLoader.
+            batch_idx: Integer displaying index of this batch.
+            dataloader_idx: Index of the current dataloader.
+        """
+        x = batch["image"]
+        y = batch["label"]
+        other_keys = batch.keys() - {"image", "label", "filename"}
+        rest = {k: batch[k] for k in other_keys}
+
+        model_output: ModelOutput = self(x, **rest)
+        
+        loss_dict = self.val_loss_handler.compute_loss(model_output, y, self.criterion, self.aux_loss)
+        self.val_loss_handler.log_loss(self.log, loss_dict=loss_dict, batch_size=y.shape[0])
+        
+        y_hat = model_output.output
+        self.val_metrics.update(y_hat, y)
+
+        if self._do_plot_samples(batch_idx):
+            try:
+                datamodule = self.trainer.datamodule
+                batch["prediction"] = y_hat
+                if isinstance(batch["image"], dict):
+                    rgb_modality = getattr(datamodule, "rgb_modality", None) or list(batch["image"].keys())[0]
+                    batch["image"] = batch["image"][rgb_modality]
+                
+                for key in ["image", "label", "prediction"]:
+                    if key in batch:
+                        batch[key] = batch[key].cpu()
+                
+                sample = unbind_samples(batch)[0]
+                fig = datamodule.val_dataset.plot(sample)
+                if fig:
+                    writer = self.logger.experiment
+                    if hasattr(writer, "add_figure"):
+                        writer.add_figure(f"image/{batch_idx}", fig, global_step=self.global_step)
+                    elif hasattr(writer, "log_figure"):
+                        writer.log_figure(self.logger.run_id, fig, f"epoch_{self.current_epoch}_{batch_idx}.png")
+            except (ValueError, KeyError, AttributeError):
+                pass
+            finally:
+                plt.close()
+
+
+    def test_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> None:
+        
+        """Compute the test loss and additional metrics.
+
+        Args:
+            batch: The output of your DataLoader.
+            batch_idx: Integer displaying index of this batch.
+            dataloader_idx: Index of the current dataloader.
+        """
+        x = batch["image"]
+        y = batch["label"]
+        other_keys = batch.keys() - {"image", "label", "filename"}
+        rest = {k: batch[k] for k in other_keys}
+        
+        model_output: ModelOutput = self(x, **rest)
+        
+        if dataloader_idx >= len(self.test_loss_handler):
+            msg = "You are returning more than one test dataloader but not defining enough test_dataloaders_names."
+            raise ValueError(msg)
+            
+        loss = self.test_loss_handler[dataloader_idx].compute_loss(model_output, y, self.criterion, self.aux_loss)
+        self.test_loss_handler[dataloader_idx].log_loss(
+            partial(self.log, add_dataloader_idx=False),
+            loss_dict=loss,
+            batch_size=y.shape[0],
+        )
+        
+        y_hat = model_output.output
+        self.test_metrics[dataloader_idx].update(y_hat, y)
+        self.record_metrics(dataloader_idx, y_hat, y)
+
+    def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Tensor:
+        
+        """Compute the predicted regression values.
+
+        Args:
+            batch: The output of your DataLoader.
+            batch_idx: Integer displaying index of this batch.
+            dataloader_idx: Index of the current dataloader.
+
+        Returns:
+            Output predicted regression values.
+        """
+        x = batch["image"]
+        file_names = batch["filename"] if "filename" in batch else None
+        other_keys = batch.keys() - {"image", "label", "filename"}
+        rest = {k: batch[k] for k in other_keys}
+        y_hat = self(x, **rest).output
+        return y_hat, file_names

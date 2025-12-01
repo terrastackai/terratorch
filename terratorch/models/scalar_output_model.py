@@ -4,7 +4,7 @@ import torch
 from segmentation_models_pytorch.base import SegmentationModel
 from torch import nn
 import torchvision.transforms as transforms
-from terratorch.models.heads import ClassificationHead
+from terratorch.models.heads import ClassificationHead, ImageLevelRegressionHead
 from terratorch.models.model import AuxiliaryHeadWithDecoderWithoutInstantiatedHead, Model, ModelOutput
 from terratorch.models.utils import pad_images
 import pdb
@@ -124,5 +124,7 @@ class ScalarOutputModel(Model, SegmentationModel):
                 msg = "num_classes must be defined for classification task"
                 raise Exception(msg)
             return ClassificationHead(input_embed_dim, **head_kwargs)
-        msg = "Task must be classification."
+        elif task == "image_level_regression":
+            return ImageLevelRegressionHead(input_embed_dim, **head_kwargs)
+        msg = "Task must be classification or image_level_regression"
         raise Exception(msg)
