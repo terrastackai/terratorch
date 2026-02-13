@@ -8,6 +8,7 @@
 # ------------------------------------------------------------------------
 
 """Deformable DETR model and criterion classes."""
+
 import copy
 import math
 
@@ -33,9 +34,9 @@ class DeformableDETR(nn.Module):
         num_classes,
         num_queries,
         num_feature_levels,
-        aux_loss=True,
-        with_box_refine=False,
-        two_stage=False,
+        aux_loss=True,  # noqa: FBT002
+        with_box_refine=False,  # noqa: FBT002
+        two_stage=False,  # noqa: FBT002
     ):
         """Initializes the model.
         Parameters:
@@ -160,10 +161,10 @@ class DeformableDETR(nn.Module):
             reference = _inverse_sigmoid(reference)
             outputs_class = self.class_embed[lvl](hs[lvl])
             tmp = self.bbox_embed[lvl](hs[lvl])
-            if reference.shape[-1] == 4:
+            if reference.shape[-1] == 4:  # noqa: PLR2004
                 tmp += reference
             else:
-                if reference.shape[-1] != 2:
+                if reference.shape[-1] != 2:  # noqa: PLR2004
                     msg = f"Last dim of reference must be 2 or 4, got {reference.shape[-1]}"
                     raise ValueError(msg)
                 tmp[..., :2] += reference
@@ -187,7 +188,9 @@ class DeformableDETR(nn.Module):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        return [{"pred_logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+        return [
+            {"pred_logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1], strict=False)
+        ]
 
 
 class SetCriterion(nn.Module):
@@ -213,7 +216,7 @@ class SetCriterion(nn.Module):
         self.losses = losses
         self.focal_alpha = focal_alpha
 
-    def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
+    def loss_labels(self, outputs, targets, indices, num_boxes, log=True):  # noqa: FBT002
         """Classification loss (NLL)
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
@@ -223,7 +226,7 @@ class SetCriterion(nn.Module):
         src_logits = outputs["pred_logits"]
 
         idx = self._get_src_permutation_idx(indices)
-        target_classes_o = torch.cat([t["labels"][j_idx] for t, (_, j_idx) in zip(targets, indices)])
+        target_classes_o = torch.cat([t["labels"][j_idx] for t, (_, j_idx) in zip(targets, indices, strict=False)])
         target_classes = torch.full(src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device)
         target_classes[idx] = target_classes_o
 
@@ -270,7 +273,7 @@ class SetCriterion(nn.Module):
             raise ValueError(msg)
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs["pred_boxes"][idx]
-        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices, strict=False)], dim=0)
 
         loss_bbox = f_nn.l1_loss(src_boxes, target_boxes, reduction="none")
 
@@ -313,7 +316,7 @@ class SetCriterion(nn.Module):
              targets: list of dicts, such that len(targets) == batch_size.
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != "aux_outputs" and k != "enc_outputs"}
+        outputs_without_aux = {k: v for k, v in outputs.items() if k not in ("aux_outputs", "enc_outputs")}
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
@@ -377,7 +380,7 @@ class PostProcess(nn.Module):
         if len(out_logits) != len(target_sizes):
             msg = "out_logits and target_sizes must have the same batch size"
             raise ValueError(msg)
-        if target_sizes.shape[1] != 2:
+        if target_sizes.shape[1] != 2:  # noqa: PLR2004
             msg = "target_sizes must have shape [batch_size, 2]"
             raise ValueError(msg)
 
@@ -394,7 +397,7 @@ class PostProcess(nn.Module):
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
         boxes = boxes * scale_fct[:, None, :]
 
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+        results = [{"scores": s, "labels": lbl, "boxes": b} for s, lbl, b in zip(scores, labels, boxes, strict=False)]
 
         return results
 
@@ -406,7 +409,7 @@ class MLP(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim, *h], [*h, output_dim], strict=False))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):

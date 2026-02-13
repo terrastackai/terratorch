@@ -1,12 +1,10 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-"""
-Modules to compute the matching cost and solve the corresponding LSAP.
-"""
+"""Modules to compute the matching cost and solve the corresponding LSAP."""
+
 import torch
 from scipy.optimize import linear_sum_assignment
 from torch import nn
-
-from util.box_ops import box_cxcywh_to_xyxy, generalized_box_iou
+from torchvision.ops import box_convert, generalized_box_iou
 
 
 class HungarianMatcher(nn.Module):
@@ -29,11 +27,13 @@ class HungarianMatcher(nn.Module):
         self.cost_class = cost_class
         self.cost_bbox = cost_bbox
         self.cost_giou = cost_giou
-        assert cost_class != 0 or cost_bbox != 0 or cost_giou != 0, "all costs cant be 0"
+        if cost_class == 0 and cost_bbox == 0 and cost_giou == 0:
+            msg = "all costs cant be 0"
+            raise ValueError(msg)
 
     @torch.no_grad()
     def forward(self, outputs, targets):
-        """ Performs the matching
+        """Performs the matching
 
         Params:
             outputs: This is a dict that contains at least these entries:
@@ -71,16 +71,14 @@ class HungarianMatcher(nn.Module):
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
 
         # Compute the giou cost betwen boxes
-        cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+        cost_giou = -generalized_box_iou(
+            box_convert(out_bbox, "cxcywh", "xyxy"), box_convert(tgt_bbox, "cxcywh", "xyxy")
+        )
 
         # Final cost matrix
-        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
-        C = C.view(bs, num_queries, -1).cpu()
+        cost_matrix = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
+        cost_matrix = cost_matrix.view(bs, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
-        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
+        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
-
-
-def build_matcher(args):
-    return HungarianMatcher(cost_class=args.set_cost_class, cost_bbox=args.set_cost_bbox, cost_giou=args.set_cost_giou)

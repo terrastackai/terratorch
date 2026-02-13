@@ -1,0 +1,81 @@
+# Example config for object detection using vanilla DETR with Prithvi backbone.
+#
+# To use Deformable DETR instead, change:
+#   framework: deformable-detr
+# Note: Deformable DETR requires the MultiScaleDeformableAttention CUDA extension.
+
+seed_everything: 0
+trainer:
+  accelerator: auto
+  strategy: auto
+  devices: auto
+  num_nodes: 1
+  precision: 16-mixed
+  logger:
+    class_path: TensorBoardLogger
+    init_args:
+      save_dir: .
+      name: prithvi-detr
+  callbacks:
+    - class_path: LearningRateMonitor
+      init_args:
+        logging_interval: epoch
+    - class_path: ModelCheckpoint
+      init_args:
+        dirpath: output/detr/checkpoints
+        mode: max
+        monitor: val_map
+        filename: best-{epoch:02d}
+        save_on_train_epoch_end: true
+        every_n_epochs: 1
+        save_top_k: -1
+  max_epochs: 100
+  check_val_every_n_epoch: 10
+  log_every_n_steps: 50
+  enable_checkpointing: true
+  default_root_dir: .
+
+data:
+  # Replace with your datamodule
+  class_path: terratorch.datamodules.YourDataModule
+  init_args:
+    batch_size: 4
+    num_workers: 4
+
+model:
+  class_path: terratorch.tasks.ObjectDetectionTask
+  init_args:
+    model_factory: ObjectDetectionModelFactory
+    model_args:
+      framework: detr
+      backbone: prithvi_eo_v2_300
+      backbone_pretrained: false
+      num_classes: 12
+      backbone_bands:
+        - RED
+        - GREEN
+        - BLUE
+      necks:
+        - name: SelectIndices
+          indices: [5, 11, 17, 23]
+        - name: ReshapeTokensToImage
+        - name: LearnedInterpolateToPyramidal
+        - name: FeaturePyramidNetworkNeck
+      framework_num_queries: 100
+      framework_d_model: 256
+      framework_nhead: 8
+      framework_num_encoder_layers: 6
+      framework_num_decoder_layers: 6
+    freeze_backbone: false
+    freeze_decoder: false
+
+optimizer:
+  class_path: torch.optim.AdamW
+  init_args:
+    lr: 1e-4
+    weight_decay: 0.05
+
+lr_scheduler:
+  class_path: CosineAnnealingLR
+  init_args:
+    T_max: 20

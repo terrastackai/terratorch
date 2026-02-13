@@ -202,19 +202,28 @@ class ObjectDetectionModelFactory(ModelFactory):
                 **framework_kwargs
             )
 
+        elif framework == 'detr':
+            from terratorch.models.detr import DETR  # noqa: PLC0415
+            model = DETR(combined_backbone, num_classes, in_channels=in_channels, **framework_kwargs)
+
+        elif framework == 'deformable-detr':
+            from terratorch.models.detr import DeformableDETR  # noqa: PLC0415
+            model = DeformableDETR(combined_backbone, num_classes, in_channels=in_channels, **framework_kwargs)
+
         else:
             raise ValueError(f"Framework type '{framework}' is not valid.")
-        # some decoders already include a head
-        # for these, we pass the num_classes to them
-        # others dont include a head
-        # for those, we dont pass num_classes
-        # model.transform = IdentityTransform()
-        model.transform = TerratorchGeneralizedRCNNTransform(model.transform.min_size, 
-                                                             model.transform.max_size, 
-                                                             model.transform.image_mean, 
-                                                             model.transform.image_std,  
-                                                             model.transform.size_divisible, 
-                                                             model.transform.fixed_size,_skip_resize=model.transform._skip_resize)
+
+        # Torchvision detection models use GeneralizedRCNNTransform; DETR models do not.
+        if framework not in ('detr', 'deformable-detr'):
+            model.transform = TerratorchGeneralizedRCNNTransform(
+                model.transform.min_size,
+                model.transform.max_size,
+                model.transform.image_mean,
+                model.transform.image_std,
+                model.transform.size_divisible,
+                model.transform.fixed_size,
+                _skip_resize=model.transform._skip_resize,
+            )
 
         return ObjectDetectionModel(model, framework)
 
@@ -277,14 +286,18 @@ class ObjectDetectionModel(Model):
     def forward(self, x, *args, **kwargs):
         """
         Forward pass of the model.
-        
+
         Parameters:
         x (torch.Tensor): Input tensor.
         **kwargs (dict): Additional keyword arguments.
-        
+
         Returns:
         torch.Tensor: Output tensor.
         """
+        if self.model_name in ('detr', 'deformable-detr'):
+            # DETR models expect [B, C, H, W] tensor directly
+            return ModelOutputObjectDetection(self.torchvision_model(x, *args, **kwargs))
+        # Torchvision detection models expect list of tensors
         return ModelOutputObjectDetection(self.torchvision_model(x, *args, **kwargs))
 
     def freeze_encoder(self):
@@ -309,6 +322,13 @@ class ObjectDetectionModel(Model):
         elif self.model_name == 'retinanet':
             for param in self.torchvision_model.head.parameters():
                 param.requires_grad = False
+        elif self.model_name in ('detr', 'deformable-detr'):
+            # Freeze transformer, classification head, and bbox head
+            for name, param in self.torchvision_model.named_parameters():
+                if name.startswith(('transformer', 'encoder', 'decoder',
+                                    'class_embed', 'bbox_embed', 'query_embed',
+                                    'input_proj', 'reference_points')):
+                    param.requires_grad = False
         else:
             raise ValueError(f"Model type '{self.model_name}' is not valid.")
 

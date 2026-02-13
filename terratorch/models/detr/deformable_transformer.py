@@ -12,8 +12,8 @@ import math
 
 import torch
 import torch.nn.functional as f_nn
-from torch import Tensor, nn
-from torch.nn.init import constant_, normal_, uniform_, xavier_uniform_
+from torch import nn
+from torch.nn.init import constant_, normal_, xavier_uniform_
 
 from terratorch.models.backbones.detr_ops.modules.ms_deform_attn import MSDeformAttn
 
@@ -35,11 +35,11 @@ class DeformableTransformer(nn.Module):
         dim_feedforward=1024,
         dropout=0.1,
         activation="relu",
-        return_intermediate_dec=False,
+        return_intermediate_dec=False,  # noqa: FBT002
         num_feature_levels=4,
         dec_n_points=4,
         enc_n_points=4,
-        two_stage=False,
+        two_stage=False,  # noqa: FBT002
         two_stage_num_proposals=300,
     ):
         super().__init__()
@@ -99,7 +99,7 @@ class DeformableTransformer(nn.Module):
         return pos
 
     def gen_encoder_output_proposals(self, memory, memory_padding_mask, spatial_shapes):
-        n_, s_, c_ = memory.shape
+        n_, _s, _c = memory.shape
         proposals = []
         _cur = 0
         for lvl, (h_, w_) in enumerate(spatial_shapes):
@@ -121,7 +121,9 @@ class DeformableTransformer(nn.Module):
             proposals.append(proposal)
             _cur += h_ * w_
         output_proposals = torch.cat(proposals, 1)
-        output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
+        output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(  # noqa: PLR2004
+            -1, keepdim=True
+        )
         output_proposals = torch.log(output_proposals / (1 - output_proposals))
         output_proposals = output_proposals.masked_fill(memory_padding_mask.unsqueeze(-1), float("inf"))
         output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
@@ -151,13 +153,13 @@ class DeformableTransformer(nn.Module):
         mask_flatten = []
         lvl_pos_embed_flatten = []
         spatial_shapes = []
-        for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, pos_embeds)):
+        for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, pos_embeds, strict=False)):
             bs, c, h, w = src.shape
             spatial_shape = (h, w)
             spatial_shapes.append(spatial_shape)
-            src = src.flatten(2).transpose(1, 2)
-            mask = mask.flatten(1)
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)
+            src = src.flatten(2).transpose(1, 2)  # noqa: PLW2901
+            mask = mask.flatten(1)  # noqa: PLW2901
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)  # noqa: PLW2901
             lvl_pos_embed = pos_embed + self.level_embed[lvl].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             src_flatten.append(src)
@@ -181,15 +183,11 @@ class DeformableTransformer(nn.Module):
 
             # hack implementation for two-stage Deformable DETR
             enc_outputs_class = self.decoder.class_embed[self.decoder.num_layers](output_memory)
-            enc_outputs_coord_unact = (
-                self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
-            )
+            enc_outputs_coord_unact = self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
 
             topk = self.two_stage_num_proposals
             topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
-            topk_coords_unact = torch.gather(
-                enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
-            )
+            topk_coords_unact = torch.gather(enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4))
             topk_coords_unact = topk_coords_unact.detach()
             reference_points = topk_coords_unact.sigmoid()
             init_reference_out = reference_points
@@ -329,7 +327,11 @@ class DeformableTransformerDecoderLayer(nn.Module):
 
         # cross attention
         tgt2 = self.cross_attn(
-            self.with_pos_embed(tgt, query_pos), reference_points, src, src_spatial_shapes, level_start_index,
+            self.with_pos_embed(tgt, query_pos),
+            reference_points,
+            src,
+            src_spatial_shapes,
+            level_start_index,
             src_padding_mask,
         )
         tgt = tgt + self.dropout1(tgt2)
@@ -342,7 +344,7 @@ class DeformableTransformerDecoderLayer(nn.Module):
 
 
 class DeformableTransformerDecoder(nn.Module):
-    def __init__(self, decoder_layer, num_layers, return_intermediate=False):
+    def __init__(self, decoder_layer, num_layers, return_intermediate=False):  # noqa: FBT002
         super().__init__()
         self.layers = _get_clones(decoder_layer, num_layers)
         self.num_layers = num_layers
@@ -367,28 +369,33 @@ class DeformableTransformerDecoder(nn.Module):
         intermediate = []
         intermediate_reference_points = []
         for lid, layer in enumerate(self.layers):
-            if reference_points.shape[-1] == 4:
-                reference_points_input = reference_points[:, :, None] * torch.cat(
-                    [src_valid_ratios, src_valid_ratios], -1
-                )[:, None]
+            if reference_points.shape[-1] == 4:  # noqa: PLR2004
+                reference_points_input = (
+                    reference_points[:, :, None] * torch.cat([src_valid_ratios, src_valid_ratios], -1)[:, None]
+                )
             else:
-                if reference_points.shape[-1] != 2:
+                if reference_points.shape[-1] != 2:  # noqa: PLR2004
                     msg = f"Last dim of reference_points must be 2 or 4, got {reference_points.shape[-1]}"
                     raise ValueError(msg)
                 reference_points_input = reference_points[:, :, None] * src_valid_ratios[:, None]
             output = layer(
-                output, query_pos, reference_points_input, src, src_spatial_shapes, src_level_start_index,
+                output,
+                query_pos,
+                reference_points_input,
+                src,
+                src_spatial_shapes,
+                src_level_start_index,
                 src_padding_mask,
             )
 
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[lid](output)
-                if reference_points.shape[-1] == 4:
+                if reference_points.shape[-1] == 4:  # noqa: PLR2004
                     new_reference_points = tmp + _inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
                 else:
-                    if reference_points.shape[-1] != 2:
+                    if reference_points.shape[-1] != 2:  # noqa: PLR2004
                         msg = f"Last dim of reference_points must be 2 or 4, got {reference_points.shape[-1]}"
                         raise ValueError(msg)
                     new_reference_points = tmp

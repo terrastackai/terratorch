@@ -1,34 +1,40 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-"""
-Various positional encodings for the transformer.
-"""
+"""Various positional encodings for the transformer."""
+
 import math
+
 import torch
 from torch import nn
 
-from util.misc import NestedTensor
-
 
 class PositionEmbeddingSine(nn.Module):
-    """
-    This is a more standard version of the position embedding, very similar to the one
+    """This is a more standard version of the position embedding, very similar to the one
     used by the Attention is all you need paper, generalized to work on images.
     """
-    def __init__(self, num_pos_feats=64, temperature=10000, normalize=False, scale=None):
+
+    def __init__(self, num_pos_feats=64, temperature=10000, normalize=False, scale=None):  # noqa: FBT002
         super().__init__()
         self.num_pos_feats = num_pos_feats
         self.temperature = temperature
         self.normalize = normalize
         if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
+            msg = "normalize should be True if scale is passed"
+            raise ValueError(msg)
         if scale is None:
             scale = 2 * math.pi
         self.scale = scale
 
-    def forward(self, tensor_list: NestedTensor):
-        x = tensor_list.tensors
-        mask = tensor_list.mask
-        assert mask is not None
+    def forward(self, x):
+        """Generate positional encoding.
+
+        Args:
+            x: Feature map tensor [B, C, H, W].
+
+        Returns:
+            Positional encoding [B, num_pos_feats*2, H, W].
+        """
+        # Create an all-False mask (no padding) from the spatial dims
+        mask = torch.zeros(x.shape[0], x.shape[2], x.shape[3], dtype=torch.bool, device=x.device)
         not_mask = ~mask
         y_embed = not_mask.cumsum(1, dtype=torch.float32)
         x_embed = not_mask.cumsum(2, dtype=torch.float32)
@@ -49,9 +55,8 @@ class PositionEmbeddingSine(nn.Module):
 
 
 class PositionEmbeddingLearned(nn.Module):
-    """
-    Absolute pos embedding, learned.
-    """
+    """Absolute pos embedding, learned."""
+
     def __init__(self, num_pos_feats=256):
         super().__init__()
         self.row_embed = nn.Embedding(50, num_pos_feats)
@@ -62,28 +67,30 @@ class PositionEmbeddingLearned(nn.Module):
         nn.init.uniform_(self.row_embed.weight)
         nn.init.uniform_(self.col_embed.weight)
 
-    def forward(self, tensor_list: NestedTensor):
-        x = tensor_list.tensors
+    def forward(self, x):
+        """Generate positional encoding.
+
+        Args:
+            x: Feature map tensor [B, C, H, W].
+
+        Returns:
+            Positional encoding [B, num_pos_feats*2, H, W].
+        """
         h, w = x.shape[-2:]
         i = torch.arange(w, device=x.device)
         j = torch.arange(h, device=x.device)
         x_emb = self.col_embed(i)
         y_emb = self.row_embed(j)
-        pos = torch.cat([
-            x_emb.unsqueeze(0).repeat(h, 1, 1),
-            y_emb.unsqueeze(1).repeat(1, w, 1),
-        ], dim=-1).permute(2, 0, 1).unsqueeze(0).repeat(x.shape[0], 1, 1, 1)
+        pos = (
+            torch.cat(
+                [
+                    x_emb.unsqueeze(0).repeat(h, 1, 1),
+                    y_emb.unsqueeze(1).repeat(1, w, 1),
+                ],
+                dim=-1,
+            )
+            .permute(2, 0, 1)
+            .unsqueeze(0)
+            .repeat(x.shape[0], 1, 1, 1)
+        )
         return pos
-
-
-def build_position_encoding(args):
-    N_steps = args.hidden_dim // 2
-    if args.position_embedding in ('v2', 'sine'):
-        # TODO find a better way of exposing other arguments
-        position_embedding = PositionEmbeddingSine(N_steps, normalize=True)
-    elif args.position_embedding in ('v3', 'learned'):
-        position_embedding = PositionEmbeddingLearned(N_steps)
-    else:
-        raise ValueError(f"not supported {args.position_embedding}")
-
-    return position_embedding
