@@ -4,13 +4,16 @@ import gc
 import unittest
 from unittest.mock import patch
 
+import lightning
 import pytest
 import torch
+from torch.utils.data import DataLoader, Dataset
 
 from terratorch.models.object_detection_model_factory import (
     ObjectDetectionModel,
     ObjectDetectionModelFactory,
 )
+from terratorch.tasks.object_detection_task import ObjectDetectionTask
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1293,6 +1296,256 @@ class TestDeformableDETRSegmentation(unittest.TestCase):
         assert len(preds) == 2
         for pred in preds:
             assert "masks" in pred
+        gc.collect()
+
+
+# ---------------------------------------------------------------------------
+# Lightning training-loop smoke tests
+# ---------------------------------------------------------------------------
+
+
+class _TinyDetectionDataset(Dataset):
+    """Random images with 1-3 random boxes per image."""
+
+    def __init__(self, size: int = 8, img_h: int = 128, img_w: int = 128, num_classes: int = 5):
+        self.size = size
+        self.img_h = img_h
+        self.img_w = img_w
+        self.num_classes = num_classes
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, idx):
+        image = torch.randn(3, self.img_h, self.img_w)
+        n = torch.randint(1, 4, (1,)).item()
+        x1 = torch.randint(0, self.img_w // 2, (n,)).float()
+        y1 = torch.randint(0, self.img_h // 2, (n,)).float()
+        x2 = (x1 + torch.randint(10, self.img_w // 2, (n,)).float()).clamp(max=self.img_w)
+        y2 = (y1 + torch.randint(10, self.img_h // 2, (n,)).float()).clamp(max=self.img_h)
+        boxes = torch.stack([x1, y1, x2, y2], dim=1)
+        labels = torch.randint(1, self.num_classes, (n,))
+        return {"image": image, "boxes": boxes, "labels": labels}
+
+
+def _det_collate(batch):
+    images = torch.stack([b["image"] for b in batch])
+    boxes = [b["boxes"] for b in batch]
+    labels = [b["labels"] for b in batch]
+    return {"image": images, "boxes": boxes, "labels": labels}
+
+
+def _make_task(framework, extra_model_args=None):
+    """Build a minimal ObjectDetectionTask for a given framework."""
+    model_args = {
+        "framework": framework,
+        "backbone": "timm_resnet18",
+        "backbone_pretrained": False,
+        "num_classes": 5,
+        "in_channels": 3,
+        "necks": [{"name": "FeaturePyramidNetworkNeck"}],
+    }
+    if extra_model_args:
+        model_args.update(extra_model_args)
+    return ObjectDetectionTask(
+        model_factory="ObjectDetectionModelFactory",
+        model_args=model_args,
+        lr=1e-4,
+        optimizer="Adam",
+        optimizer_hparams={},
+        scheduler=None,
+        scheduler_hparams={},
+        freeze_backbone=False,
+        freeze_decoder=False,
+        class_names=None,
+        iou_threshold=0.5,
+        score_threshold=0.5,
+    )
+
+
+def _run_train_loop(task):
+    """Run 2 train + 1 val epoch via Lightning Trainer on CPU."""
+    train_loader = DataLoader(
+        _TinyDetectionDataset(size=8),
+        batch_size=4,
+        collate_fn=_det_collate,
+        shuffle=True,
+    )
+    val_loader = DataLoader(
+        _TinyDetectionDataset(size=4),
+        batch_size=4,
+        collate_fn=_det_collate,
+    )
+    trainer = lightning.Trainer(
+        accelerator="cpu",
+        max_epochs=2,
+        enable_checkpointing=False,
+        enable_progress_bar=False,
+        log_every_n_steps=1,
+        limit_train_batches=2,
+        limit_val_batches=1,
+    )
+    trainer.fit(task, train_dataloaders=train_loader, val_dataloaders=val_loader)
+    return trainer
+
+
+class TestDETRTrainingLoop(unittest.TestCase):
+    """End-to-end Lightning training loop for vanilla DETR."""
+
+    def test_train_val_loop(self):
+        task = _make_task(
+            "detr",
+            {
+                "framework_d_model": 64,
+                "framework_nhead": 4,
+                "framework_num_encoder_layers": 1,
+                "framework_num_decoder_layers": 1,
+                "framework_dim_feedforward": 128,
+                "framework_num_queries": 10,
+                "framework_aux_loss": False,
+            },
+        )
+        trainer = _run_train_loop(task)
+        assert "train_loss" in trainer.callback_metrics
+        gc.collect()
+
+    def test_predict_after_training(self):
+        task = _make_task(
+            "detr",
+            {
+                "framework_d_model": 64,
+                "framework_nhead": 4,
+                "framework_num_encoder_layers": 1,
+                "framework_num_decoder_layers": 1,
+                "framework_dim_feedforward": 128,
+                "framework_num_queries": 10,
+                "framework_aux_loss": False,
+            },
+        )
+        _run_train_loop(task)
+        task.model.eval()
+        batch = {
+            "image": torch.randn(2, 3, 128, 128),
+            "boxes": [torch.tensor([[10, 10, 50, 50]], dtype=torch.float32)] * 2,
+            "labels": [torch.tensor([1])] * 2,
+        }
+        with torch.no_grad():
+            preds = task.predict_step(batch, batch_idx=0)
+        assert isinstance(preds, list)
+        assert len(preds) == 2
+        for p in preds:
+            assert "boxes" in p
+            assert "scores" in p
+            assert "labels" in p
+        gc.collect()
+
+
+@requires_msdeform
+class TestDeformableDETRTrainingLoop(unittest.TestCase):
+    """End-to-end Lightning training loop for Deformable DETR."""
+
+    def test_train_val_loop(self):
+        task = _make_task(
+            "deformable-detr",
+            {
+                "framework_d_model": 64,
+                "framework_nhead": 4,
+                "framework_num_encoder_layers": 1,
+                "framework_num_decoder_layers": 1,
+                "framework_dim_feedforward": 128,
+                "framework_num_queries": 10,
+                "framework_aux_loss": False,
+            },
+        )
+        trainer = _run_train_loop(task)
+        assert "train_loss" in trainer.callback_metrics
+        gc.collect()
+
+    def test_predict_after_training(self):
+        task = _make_task(
+            "deformable-detr",
+            {
+                "framework_d_model": 64,
+                "framework_nhead": 4,
+                "framework_num_encoder_layers": 1,
+                "framework_num_decoder_layers": 1,
+                "framework_dim_feedforward": 128,
+                "framework_num_queries": 10,
+                "framework_aux_loss": False,
+            },
+        )
+        _run_train_loop(task)
+        task.model.eval()
+        batch = {
+            "image": torch.randn(2, 3, 128, 128),
+            "boxes": [torch.tensor([[10, 10, 50, 50]], dtype=torch.float32)] * 2,
+            "labels": [torch.tensor([1])] * 2,
+        }
+        with torch.no_grad():
+            preds = task.predict_step(batch, batch_idx=0)
+        assert isinstance(preds, list)
+        assert len(preds) == 2
+        for p in preds:
+            assert "boxes" in p
+            assert "scores" in p
+            assert "labels" in p
+        gc.collect()
+
+
+class TestRFDETRTrainingLoop(unittest.TestCase):
+    """End-to-end Lightning training loop for RF-DETR."""
+
+    def test_train_val_loop(self):
+        task = _make_task(
+            "rf-detr",
+            {
+                "framework_d_model": 64,
+                "framework_sa_nhead": 4,
+                "framework_ca_nhead": 4,
+                "framework_num_decoder_layers": 1,
+                "framework_dim_feedforward": 128,
+                "framework_num_queries": 10,
+                "framework_num_select": 10,
+                "framework_two_stage": True,
+                "framework_bbox_reparam": True,
+                "framework_aux_loss": False,
+            },
+        )
+        trainer = _run_train_loop(task)
+        assert "train_loss" in trainer.callback_metrics
+        gc.collect()
+
+    def test_predict_after_training(self):
+        task = _make_task(
+            "rf-detr",
+            {
+                "framework_d_model": 64,
+                "framework_sa_nhead": 4,
+                "framework_ca_nhead": 4,
+                "framework_num_decoder_layers": 1,
+                "framework_dim_feedforward": 128,
+                "framework_num_queries": 10,
+                "framework_num_select": 10,
+                "framework_two_stage": True,
+                "framework_bbox_reparam": True,
+                "framework_aux_loss": False,
+            },
+        )
+        _run_train_loop(task)
+        task.model.eval()
+        batch = {
+            "image": torch.randn(2, 3, 128, 128),
+            "boxes": [torch.tensor([[10, 10, 50, 50]], dtype=torch.float32)] * 2,
+            "labels": [torch.tensor([1])] * 2,
+        }
+        with torch.no_grad():
+            preds = task.predict_step(batch, batch_idx=0)
+        assert isinstance(preds, list)
+        assert len(preds) == 2
+        for p in preds:
+            assert "boxes" in p
+            assert "scores" in p
+            assert "labels" in p
         gc.collect()
 
 
