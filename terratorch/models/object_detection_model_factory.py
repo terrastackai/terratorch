@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from torch import nn
-import pdb
 from terratorch.models.model import (
     Model,
     ModelFactory,
@@ -140,6 +139,7 @@ class ObjectDetectionModelFactory(ModelFactory):
                 **framework_kwargs
 
             )
+
         elif framework == 'retinanet':
 
             sizes = (
@@ -210,11 +210,15 @@ class ObjectDetectionModelFactory(ModelFactory):
             from terratorch.models.detr import DeformableDETR  # noqa: PLC0415
             model = DeformableDETR(combined_backbone, num_classes, in_channels=in_channels, **framework_kwargs)
 
+        elif framework == 'rf-detr':
+            from terratorch.models.detr import RFDETR  # noqa: PLC0415
+            model = RFDETR(combined_backbone, num_classes, in_channels=in_channels, **framework_kwargs)
+
         else:
             raise ValueError(f"Framework type '{framework}' is not valid.")
 
         # Torchvision detection models use GeneralizedRCNNTransform; DETR models do not.
-        if framework not in ('detr', 'deformable-detr'):
+        if framework not in ('detr', 'deformable-detr', 'rf-detr'):
             model.transform = TerratorchGeneralizedRCNNTransform(
                 model.transform.min_size,
                 model.transform.max_size,
@@ -294,7 +298,7 @@ class ObjectDetectionModel(Model):
         Returns:
         torch.Tensor: Output tensor.
         """
-        if self.model_name in ('detr', 'deformable-detr'):
+        if self.model_name in ('detr', 'deformable-detr', 'rf-detr'):
             # DETR models expect [B, C, H, W] tensor directly
             return ModelOutputObjectDetection(self.torchvision_model(x, *args, **kwargs))
         # Torchvision detection models expect list of tensors
@@ -322,12 +326,13 @@ class ObjectDetectionModel(Model):
         elif self.model_name == 'retinanet':
             for param in self.torchvision_model.head.parameters():
                 param.requires_grad = False
-        elif self.model_name in ('detr', 'deformable-detr'):
+        elif self.model_name in ('detr', 'deformable-detr', 'rf-detr'):
             # Freeze transformer, classification head, and bbox head
             for name, param in self.torchvision_model.named_parameters():
                 if name.startswith(('transformer', 'encoder', 'decoder',
                                     'class_embed', 'bbox_embed', 'query_embed',
-                                    'input_proj', 'reference_points')):
+                                    'input_proj', 'reference_points',
+                                    'lwdetr', 'criterion', 'position_embedding')):
                     param.requires_grad = False
         else:
             raise ValueError(f"Model type '{self.model_name}' is not valid.")

@@ -11,32 +11,32 @@
 # ------------------------------------------------------------------------------------------------
 # Modified from https://github.com/chengdazhi/Deformable-Convolution-V2-PyTorch/tree/pytorch_1.0.0
 # ------------------------------------------------------------------------------------------------
+# Adapted for TerraTorch: ruff compliance.
 """
 ms_deform_attn_func
 """
-from __future__ import absolute_import, division, print_function
 
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as f_nn
 
 
 def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations, attention_weights):
-    """"for debug and test only, need to use cuda version instead
-    """
+    """Pure-PyTorch multi-scale deformable attention (for debug and test only)."""
     # B, n_heads, head_dim, N
-    B, n_heads, head_dim, _ = value.shape
-    _, Len_q, n_heads, L, P, _ = sampling_locations.shape
+    B, n_heads, head_dim, _ = value.shape  # noqa: N806
+    _, Len_q, n_heads, L, P, _ = sampling_locations.shape  # noqa: N806
     value_list = value.split([H * W for H, W in value_spatial_shapes], dim=3)
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
-    for lid_, (H, W) in enumerate(value_spatial_shapes):
+    for lid_, (H, W) in enumerate(value_spatial_shapes):  # noqa: N806
         # B, n_heads, head_dim, H, W
         value_l_ = value_list[lid_].view(B * n_heads, head_dim, H, W)
         # B, Len_q, n_heads, P, 2 -> B, n_heads, Len_q, P, 2 -> B*n_heads, Len_q, P, 2
         sampling_grid_l_ = sampling_grids[:, :, :, lid_].transpose(1, 2).flatten(0, 1)
         # B*n_heads, head_dim, Len_q, P
-        sampling_value_l_ = F.grid_sample(value_l_, sampling_grid_l_,
-                                          mode='bilinear', padding_mode='zeros', align_corners=False)
+        sampling_value_l_ = f_nn.grid_sample(
+            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
+        )
         sampling_value_list.append(sampling_value_l_)
     # (B, Len_q, n_heads, L * P) -> (B, n_heads, Len_q, L, P) -> (B*n_heads, 1, Len_q, L*P)
     attention_weights = attention_weights.transpose(1, 2).reshape(B * n_heads, 1, Len_q, L * P)

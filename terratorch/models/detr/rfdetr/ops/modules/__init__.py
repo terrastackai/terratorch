@@ -10,4 +10,4 @@
 # Modified from https://github.com/chengdazhi/Deformable-Convolution-V2-PyTorch/tree/pytorch_1.0.0
 # ------------------------------------------------------------------------
 
-from rfdetr.models.ops.modules.ms_deform_attn import MSDeformAttn
+from terratorch.models.detr.rfdetr.ops.modules.ms_deform_attn import MSDeformAttn as MSDeformAttn

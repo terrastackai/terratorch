@@ -14,4 +14,7 @@
 """
 ms_deform_attn_func
 """
-from rfdetr.models.ops.functions.ms_deform_attn_func import ms_deform_attn_core_pytorch
+
+from terratorch.models.detr.rfdetr.ops.functions.ms_deform_attn_func import (
+    ms_deform_attn_core_pytorch as ms_deform_attn_core_pytorch,
+)
