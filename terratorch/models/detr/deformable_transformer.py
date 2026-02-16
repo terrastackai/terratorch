@@ -11,7 +11,7 @@ import copy
 import math
 
 import torch
-import torch.nn.functional as f_nn
+import torch.nn.functional as F
 from torch import nn
 from torch.nn.init import constant_, normal_, xavier_uniform_
 
@@ -420,10 +420,10 @@ def _get_clones(module, num_clones):
 def _get_activation_fn(activation):
     """Return an activation function given a string"""
     if activation == "relu":
-        return f_nn.relu
+        return F.relu
     if activation == "gelu":
-        return f_nn.gelu
+        return F.gelu
     if activation == "glu":
-        return f_nn.glu
+        return F.glu
     msg = f"activation should be relu/gelu, not {activation}."
     raise RuntimeError(msg)

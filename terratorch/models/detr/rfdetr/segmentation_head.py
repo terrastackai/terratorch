@@ -6,7 +6,7 @@
 # Adapted for TerraTorch: ruff compliance.
 
 import torch
-import torch.nn.functional as f_nn
+import torch.nn.functional as F
 from torch import nn
 
 
@@ -92,7 +92,7 @@ class SegmentationHead(nn.Module):
         skip_blocks: bool = False,  # noqa: FBT001, FBT002
     ) -> list[torch.Tensor]:
         target_size = (image_size[0] // self.downsample_ratio, image_size[1] // self.downsample_ratio)
-        spatial_features = f_nn.interpolate(spatial_features, size=target_size, mode="bilinear", align_corners=False)
+        spatial_features = F.interpolate(spatial_features, size=target_size, mode="bilinear", align_corners=False)
 
         mask_logits = []
         if not skip_blocks:
@@ -115,7 +115,7 @@ class SegmentationHead(nn.Module):
         skip_blocks: bool = False,  # noqa: FBT001, FBT002
     ) -> list[torch.Tensor]:
         target_size = (image_size[0] // self.downsample_ratio, image_size[1] // self.downsample_ratio)
-        spatial_features = f_nn.interpolate(spatial_features, size=target_size, mode="bilinear", align_corners=False)
+        spatial_features = F.interpolate(spatial_features, size=target_size, mode="bilinear", align_corners=False)
 
         output_dicts = []
 
@@ -160,7 +160,7 @@ def point_sample(input_tensor, point_coords, **kwargs):
     if point_coords.dim() == 3:  # noqa: PLR2004
         add_dim = True
         point_coords = point_coords.unsqueeze(2)
-    output = f_nn.grid_sample(input_tensor, 2.0 * point_coords - 1.0, padding_mode="border", **kwargs)
+    output = F.grid_sample(input_tensor, 2.0 * point_coords - 1.0, padding_mode="border", **kwargs)
     if add_dim:
         output = output.squeeze(3)
     return output

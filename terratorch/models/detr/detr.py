@@ -2,7 +2,7 @@
 """DETR model and criterion classes."""
 
 import torch
-import torch.nn.functional as f_nn
+import torch.nn.functional as F
 from torch import nn
 from torchvision.ops import box_convert, generalized_box_iou
 
@@ -105,7 +105,7 @@ class SetCriterion(nn.Module):
         target_classes = torch.full(src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device)
         target_classes[idx] = target_classes_o
 
-        loss_ce = f_nn.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {"loss_ce": loss_ce}
 
         if log:
@@ -122,7 +122,7 @@ class SetCriterion(nn.Module):
         tgt_lengths = torch.as_tensor([len(v["labels"]) for v in targets], device=device)
         # Count the number of predictions that are NOT "no-object" (which is the last class)
         card_pred = (pred_logits.argmax(-1) != pred_logits.shape[-1] - 1).sum(1)
-        card_err = f_nn.l1_loss(card_pred.float(), tgt_lengths.float())
+        card_err = F.l1_loss(card_pred.float(), tgt_lengths.float())
         losses = {"cardinality_error": card_err}
         return losses
 
@@ -139,7 +139,7 @@ class SetCriterion(nn.Module):
         target_masks = target_masks.to(src_masks)
 
         # Upsample predictions to target size
-        src_masks = f_nn.interpolate(
+        src_masks = F.interpolate(
             src_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
         )
         src_masks = src_masks[:, 0].flatten(1)
@@ -162,7 +162,7 @@ class SetCriterion(nn.Module):
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices, strict=False)], dim=0)
 
-        loss_bbox = f_nn.l1_loss(src_boxes, target_boxes, reduction="none")
+        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")
 
         losses = {}
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
@@ -261,7 +261,7 @@ class PostProcess(nn.Module):
             msg = "target_sizes must have shape [batch_size, 2]"
             raise ValueError(msg)
 
-        prob = f_nn.softmax(out_logits, -1)
+        prob = F.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
 
         # convert to [x0, y0, x1, y1] format
@@ -287,7 +287,7 @@ class MLP(nn.Module):
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
-            x = f_nn.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
 
 

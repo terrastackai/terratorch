@@ -23,7 +23,7 @@ Modules to compute the matching cost and solve the corresponding LSAP.
 
 import numpy as np
 import torch
-import torch.nn.functional as f_nn
+import torch.nn.functional as F
 from scipy.optimize import linear_sum_assignment
 from torch import nn
 
@@ -86,8 +86,8 @@ class HungarianMatcher(nn.Module):
         gamma = 2.0
 
         # Use logsigmoid for numerical stability
-        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-f_nn.logsigmoid(-flat_pred_logits))
-        pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-f_nn.logsigmoid(flat_pred_logits))
+        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-F.logsigmoid(-flat_pred_logits))
+        pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-F.logsigmoid(flat_pred_logits))
         cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
 
         # Compute the L1 cost between boxes

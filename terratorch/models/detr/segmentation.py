@@ -8,7 +8,7 @@ Original: https://github.com/facebookresearch/detr/blob/main/models/segmentation
 from __future__ import annotations
 
 import torch
-import torch.nn.functional as f_nn
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 
@@ -54,34 +54,34 @@ class MaskHeadSmallConv(nn.Module):
 
         x = self.lay1(x)
         x = self.gn1(x)
-        x = f_nn.relu(x)
+        x = F.relu(x)
         x = self.lay2(x)
         x = self.gn2(x)
-        x = f_nn.relu(x)
+        x = F.relu(x)
 
         cur_fpn = self.adapter1(fpns[0])
         if cur_fpn.size(0) != x.size(0):
             cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + f_nn.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = cur_fpn + F.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
         x = self.lay3(x)
         x = self.gn3(x)
-        x = f_nn.relu(x)
+        x = F.relu(x)
 
         cur_fpn = self.adapter2(fpns[1])
         if cur_fpn.size(0) != x.size(0):
             cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + f_nn.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = cur_fpn + F.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
         x = self.lay4(x)
         x = self.gn4(x)
-        x = f_nn.relu(x)
+        x = F.relu(x)
 
         cur_fpn = self.adapter3(fpns[2])
         if cur_fpn.size(0) != x.size(0):
             cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + f_nn.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = cur_fpn + F.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
         x = self.lay5(x)
         x = self.gn5(x)
-        x = f_nn.relu(x)
+        x = F.relu(x)
 
         return self.out_lay(x)
 
@@ -113,14 +113,14 @@ class MHAttentionMap(nn.Module):
 
     def forward(self, q: Tensor, k: Tensor, mask: Tensor | None = None) -> Tensor:
         q = self.q_linear(q)
-        k = f_nn.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
+        k = F.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
         qh = q.view(q.shape[0], q.shape[1], self.num_heads, self.hidden_dim // self.num_heads)
         kh = k.view(k.shape[0], self.num_heads, self.hidden_dim // self.num_heads, k.shape[-2], k.shape[-1])
         weights = torch.einsum("bqnc,bnchw->bqnhw", qh * self.normalize_fact, kh)
 
         if mask is not None:
             weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), float("-inf"))
-        weights = f_nn.softmax(weights.flatten(2), dim=-1).view(weights.size())
+        weights = F.softmax(weights.flatten(2), dim=-1).view(weights.size())
         weights = self.dropout(weights)
         return weights
 
@@ -154,7 +154,7 @@ def sigmoid_focal_loss(
         gamma: Exponent of the modulating factor.
     """
     prob = inputs.sigmoid()
-    ce_loss = f_nn.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
     p_t = prob * targets + (1 - prob) * (1 - targets)
     loss = ce_loss * ((1 - p_t) ** gamma)
 
@@ -184,7 +184,7 @@ class PostProcessSegm(nn.Module):
         outputs_masks = outputs["pred_masks"]
         # All images same size in TerraTorch batches
         target_h, target_w = target_sizes[0].tolist()
-        outputs_masks = f_nn.interpolate(
+        outputs_masks = F.interpolate(
             outputs_masks, size=(int(target_h), int(target_w)), mode="bilinear", align_corners=False
         )
         outputs_masks = (outputs_masks.sigmoid() > self.threshold).cpu()

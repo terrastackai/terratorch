@@ -25,7 +25,7 @@ import copy
 import math
 
 import torch
-import torch.nn.functional as f_nn
+import torch.nn.functional as F
 from torch import nn
 
 from terratorch.models.detr.dist_utils import get_world_size, is_dist_avail_and_initialized
@@ -260,7 +260,7 @@ class SetCriterion(nn.Module):
 
             pos_weights[pos_ind] = t.to(pos_weights.dtype)
             neg_weights[pos_ind] = 1 - t.to(neg_weights.dtype)
-            loss_ce = neg_weights * src_logits - f_nn.logsigmoid(src_logits) * (pos_weights + neg_weights)
+            loss_ce = neg_weights * src_logits - F.logsigmoid(src_logits) * (pos_weights + neg_weights)
             loss_ce = loss_ce.sum() / num_boxes
 
         elif self.use_position_supervised_loss:
@@ -350,7 +350,7 @@ class SetCriterion(nn.Module):
         device = pred_logits.device
         tgt_lengths = torch.as_tensor([len(v["labels"]) for v in targets], device=device)
         card_pred = (pred_logits.argmax(-1) != pred_logits.shape[-1] - 1).sum(1)
-        card_err = f_nn.l1_loss(card_pred.float(), tgt_lengths.float())
+        card_err = F.l1_loss(card_pred.float(), tgt_lengths.float())
         return {"cardinality_error": card_err}
 
     def loss_boxes(self, outputs, targets, indices, num_boxes):
@@ -359,7 +359,7 @@ class SetCriterion(nn.Module):
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices, strict=False)], dim=0)
 
-        loss_bbox = f_nn.l1_loss(src_boxes, target_boxes, reduction="none")
+        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")
 
         losses = {}
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
@@ -519,7 +519,7 @@ class SetCriterion(nn.Module):
 def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
     """Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002."""
     prob = inputs.sigmoid()
-    ce_loss = f_nn.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
     p_t = prob * targets + (1 - prob) * (1 - targets)
     loss = ce_loss * ((1 - p_t) ** gamma)
 
@@ -535,7 +535,7 @@ def sigmoid_varifocal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamm
     focal_weight = (
         targets * (targets > 0.0).float() + (1 - alpha) * (prob - targets).abs().pow(gamma) * (targets <= 0.0).float()
     )
-    ce_loss = f_nn.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
     loss = ce_loss * focal_weight
 
     return loss.mean(1).sum() / num_boxes
@@ -543,7 +543,7 @@ def sigmoid_varifocal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamm
 
 def position_supervised_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
     prob = inputs.sigmoid()
-    ce_loss = f_nn.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
     loss = ce_loss * (torch.abs(targets - prob) ** gamma)
 
     if alpha >= 0:
@@ -575,7 +575,7 @@ def sigmoid_ce_loss(
     targets: torch.Tensor,
     num_masks: float,
 ):
-    loss = f_nn.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
     return loss.mean(1).sum() / num_masks
 
 
@@ -618,7 +618,7 @@ class PostProcess(nn.Module):
                     k_idx.unsqueeze(-1).unsqueeze(-1).repeat(1, out_masks.shape[-2], out_masks.shape[-1]),
                 )  # [K, Hm, Wm]
                 h, w = target_sizes[i].tolist()
-                masks_i = f_nn.interpolate(
+                masks_i = F.interpolate(
                     masks_i.unsqueeze(1), size=(int(h), int(w)), mode="bilinear", align_corners=False
                 )  # [K,1,H,W]
                 res_i["masks"] = masks_i > 0.0
@@ -640,5 +640,5 @@ class MLP(nn.Module):
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
-            x = f_nn.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x

@@ -20,7 +20,7 @@ Utilities for bounding box manipulation and GIoU.
 """
 
 import torch
-import torch.nn.functional as f_nn
+import torch.nn.functional as F
 from torchvision.ops.boxes import box_area
 
 
@@ -118,8 +118,8 @@ def batch_sigmoid_ce_loss(inputs: torch.Tensor, targets: torch.Tensor) -> torch.
     """Binary cross-entropy loss for masks, computed pairwise efficiently."""
     hw = inputs.shape[1]
 
-    pos = f_nn.binary_cross_entropy_with_logits(inputs, torch.ones_like(inputs), reduction="none")
-    neg = f_nn.binary_cross_entropy_with_logits(inputs, torch.zeros_like(inputs), reduction="none")
+    pos = F.binary_cross_entropy_with_logits(inputs, torch.ones_like(inputs), reduction="none")
+    neg = F.binary_cross_entropy_with_logits(inputs, torch.zeros_like(inputs), reduction="none")
 
     loss = torch.einsum("nc,mc->nm", pos, targets) + torch.einsum("nc,mc->nm", neg, (1 - targets))
 

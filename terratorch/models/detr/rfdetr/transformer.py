@@ -21,7 +21,7 @@ import copy
 import math
 
 import torch
-import torch.nn.functional as f_nn
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 from terratorch.models.detr.rfdetr.ops.modules import MSDeformAttn
@@ -38,7 +38,7 @@ class MLP(nn.Module):
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
-            x = f_nn.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
 
 
@@ -664,10 +664,10 @@ def build_transformer(args):
 def _get_activation_fn(activation):
     """Return an activation function given a string."""
     if activation == "relu":
-        return f_nn.relu
+        return F.relu
     if activation == "gelu":
-        return f_nn.gelu
+        return F.gelu
     if activation == "glu":
-        return f_nn.glu
+        return F.glu
     msg = f"activation should be relu/gelu, not {activation}."
     raise RuntimeError(msg)

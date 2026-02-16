@@ -20,7 +20,7 @@ import math
 import warnings
 
 import torch
-import torch.nn.functional as f_nn
+import torch.nn.functional as F
 from torch import nn
 from torch.nn.init import constant_, xavier_uniform_
 
@@ -152,7 +152,7 @@ class MSDeformAttn(nn.Module):
         else:
             msg = f"Last dim of reference_points must be 2 or 4, but get {reference_points.shape[-1]} instead."
             raise ValueError(msg)
-        attention_weights = f_nn.softmax(attention_weights, -1)
+        attention_weights = F.softmax(attention_weights, -1)
 
         value = value.transpose(1, 2).contiguous().view(N, self.n_heads, self.d_model // self.n_heads, Len_in)
         output = ms_deform_attn_core_pytorch(value, input_spatial_shapes, sampling_locations, attention_weights)
