@@ -19,6 +19,7 @@ from torchvision.ops import box_convert, generalized_box_iou
 
 from terratorch.models.detr.deformable_transformer import _inverse_sigmoid
 from terratorch.models.detr.dist_utils import get_world_size, is_dist_avail_and_initialized
+from terratorch.models.detr.segmentation import dice_loss
 
 
 def _get_clones(module, num_clones):
@@ -270,6 +271,30 @@ class SetCriterion(nn.Module):
         losses = {"cardinality_error": card_err}
         return losses
 
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        """Compute the mask losses (focal + dice) for instance segmentation.
+
+        targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, H, W].
+        """
+        src_idx = self._get_src_permutation_idx(indices)
+        src_masks = outputs["pred_masks"]
+        src_masks = src_masks[src_idx]
+
+        target_masks = torch.cat([t["masks"][j] for t, (_, j) in zip(targets, indices, strict=False)], dim=0)
+        target_masks = target_masks.to(src_masks)
+
+        # Upsample predictions to target size
+        src_masks = f_nn.interpolate(
+            src_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        )
+        src_masks = src_masks[:, 0].flatten(1)
+        target_masks = target_masks.flatten(1)
+
+        return {
+            "loss_mask": sigmoid_focal_loss(src_masks, target_masks, num_boxes),
+            "loss_dice": dice_loss(src_masks, target_masks, num_boxes),
+        }
+
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss
         targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]
@@ -310,6 +335,7 @@ class SetCriterion(nn.Module):
             "labels": self.loss_labels,
             "cardinality": self.loss_cardinality,
             "boxes": self.loss_boxes,
+            "masks": self.loss_masks,
         }
         if loss not in loss_map:
             msg = f"do you really want to compute {loss} loss?"
@@ -346,6 +372,9 @@ class SetCriterion(nn.Module):
             for i, aux_outputs in enumerate(outputs["aux_outputs"]):
                 indices = self.matcher(aux_outputs, targets)
                 for loss in self.losses:
+                    # Intermediate mask losses are too costly to compute
+                    if loss == "masks":
+                        continue
                     kwargs = {}
                     if loss == "labels":
                         # Logging is enabled only for the last layer

@@ -98,7 +98,8 @@ class ObjectDetectionTask(BaseTask):
         self.model_factory = MODEL_FACTORY_REGISTRY.build(model_factory)
         self.model_args = model_args
         self.framework = model_args['framework']
-        self.monitor = 'val_segm_map' if self.framework == 'mask-rcnn' else self.monitor
+        _has_masks = self.framework == 'mask-rcnn' or model_args.get('framework_masks', False)
+        self.monitor = 'val_segm_map' if _has_masks else self.monitor
         
         super().__init__()
         self.train_loss_handler = LossHandler(self.train_metrics.prefix)
@@ -135,7 +136,8 @@ class ObjectDetectionTask(BaseTask):
         """
         Configure metrics for the task.
         """
-        if self.framework == 'mask-rcnn':
+        _has_masks = self.framework == 'mask-rcnn' or self.model_args.get('framework_masks', False)
+        if _has_masks:
             metrics = MetricCollection({
                 "mAP": MeanAveragePrecision(
                     iou_type=('bbox', 'segm'),
@@ -310,14 +312,12 @@ class ObjectDetectionTask(BaseTask):
     
         y_hat = self.apply_nms_batch(y_hat, batch_size)
 
-        if self.framework == 'mask-rcnn':
-
+        if self.framework == 'mask-rcnn' or self.model_args.get('framework_masks', False):
             for i in range(len(y_hat)):
-                if y_hat[i]['masks'].shape[0] > 0:
+                if 'masks' in y_hat[i] and y_hat[i]['masks'].shape[0] > 0:
+                    y_hat[i]['masks'] = (y_hat[i]['masks'] > 0.5).squeeze(1).to(torch.uint8)
 
-                    y_hat[i]['masks']= (y_hat[i]['masks'] > 0.5).squeeze(1).to(torch.uint8)
-
-        metrics = self.val_metrics(y_hat, y) 
+        metrics = self.val_metrics(y_hat, y)
 
         # https://github.com/Lightning-AI/torchmetrics/pull/1832#issuecomment-1623890714
         metrics.pop('val_classes', None)
@@ -338,8 +338,8 @@ class ObjectDetectionTask(BaseTask):
                 batch['boxes'] = batch.pop(self.boxes_field)
             if 'labels' not in batch.keys():
                 batch['labels'] = batch.pop(self.labels_field)
-            if self.framework == 'mask-rcnn':
-                if 'masks' not in batch.keys():
+            if self.framework == 'mask-rcnn' or self.model_args.get('framework_masks', False):
+                if 'masks' not in batch.keys() and self.masks_field in batch.keys():
                     batch['masks'] = batch.pop(self.masks_field)
 
             # dataset = self.trainer.datamodule.val_dataset
@@ -400,12 +400,10 @@ class ObjectDetectionTask(BaseTask):
 
         y_hat = self.apply_nms_batch(y_hat, batch_size)
 
-        if self.framework == 'mask-rcnn':
-
+        if self.framework == 'mask-rcnn' or self.model_args.get('framework_masks', False):
             for i in range(len(y_hat)):
-                if y_hat[i]['masks'].shape[0] > 0:
-                    y_hat[i]['masks']= (y_hat[i]['masks'] > 0.5).squeeze(1).to(torch.uint8)
-
+                if 'masks' in y_hat[i] and y_hat[i]['masks'].shape[0] > 0:
+                    y_hat[i]['masks'] = (y_hat[i]['masks'] > 0.5).squeeze(1).to(torch.uint8)
 
         metrics = self.test_metrics(y_hat, y)
 

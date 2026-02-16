@@ -46,12 +46,14 @@ class TerraTorchDETR(nn.Module):
         num_queries: int = 100,
         eos_coef: float = 0.1,
         aux_loss: bool = False,  # noqa: FBT001, FBT002
+        masks: bool = False,  # noqa: FBT001, FBT002
     ):
         super().__init__()
         self.backbone = backbone
         self.num_classes = num_classes
         self.num_queries = num_queries
         self.aux_loss = aux_loss
+        self.masks = masks
 
         backbone_out_channels = backbone.out_channels
         self.input_proj = nn.Conv2d(backbone_out_channels, d_model, kernel_size=1)
@@ -64,21 +66,43 @@ class TerraTorchDETR(nn.Module):
             num_decoder_layers=num_decoder_layers,
             dim_feedforward=dim_feedforward,
             dropout=dropout,
-            return_intermediate_dec=aux_loss,
+            return_intermediate_dec=aux_loss or masks,
         )
 
         self.query_embed = nn.Embedding(num_queries, d_model)
         self.class_embed = nn.Linear(d_model, num_classes + 1)
         self.bbox_embed = DETR_MLP(d_model, d_model, 4, 3)
 
+        # Mask head (instance segmentation)
+        if masks:
+            from terratorch.models.detr.segmentation import (  # noqa: PLC0415
+                MaskHeadSmallConv,
+                MHAttentionMap,
+                PostProcessSegm,
+            )
+
+            if len(backbone.channel_list) < 4:  # noqa: PLR2004
+                msg = f"Mask head requires at least 4 backbone feature levels, got {len(backbone.channel_list)}"
+                raise ValueError(msg)
+
+            self.bbox_attention = MHAttentionMap(d_model, d_model, nhead, dropout=0.0)
+            fpn_dims = list(reversed(backbone.channel_list[:-1]))
+            self.mask_head = MaskHeadSmallConv(d_model + nhead, fpn_dims, d_model)
+            self.postprocess_segm = PostProcessSegm()
+
         # Loss
         matcher = HungarianMatcher(cost_class=1, cost_bbox=5, cost_giou=2)
         base_weight_dict = {"loss_ce": 1, "loss_bbox": 5, "loss_giou": 2}
+        if masks:
+            base_weight_dict["loss_mask"] = 1
+            base_weight_dict["loss_dice"] = 1
         weight_dict = dict(base_weight_dict)
         if aux_loss:
             for i in range(num_decoder_layers - 1):
                 weight_dict.update({k + f"_{i}": v for k, v in base_weight_dict.items()})
         losses = ["labels", "boxes", "cardinality"]
+        if masks:
+            losses.append("masks")
         self.criterion = DETRSetCriterion(
             num_classes, matcher=matcher, weight_dict=weight_dict, eos_coef=eos_coef, losses=losses
         )
@@ -103,7 +127,7 @@ class TerraTorchDETR(nn.Module):
             Training: dict of losses.
             Eval: list of dicts with 'boxes' (xyxy), 'scores', 'labels'.
         """
-        _bs, _, img_h, img_w = images.shape
+        bs, _, img_h, img_w = images.shape
 
         # Extract features from backbone
         features = self.backbone(images)
@@ -115,16 +139,16 @@ class TerraTorchDETR(nn.Module):
         src = feature_list[-1]  # [B, C_backbone, H', W']
 
         # Project to d_model
-        src = self.input_proj(src)  # [B, d_model, H', W']
-        pos = self.position_embedding(src)  # [B, d_model, H', W']
+        src_proj = self.input_proj(src)  # [B, d_model, H', W']
+        pos = self.position_embedding(src_proj)  # [B, d_model, H', W']
 
         # Create mask (all False = no padding)
-        mask = torch.zeros(src.shape[0], src.shape[2], src.shape[3], dtype=torch.bool, device=src.device)
+        mask = torch.zeros(
+            src_proj.shape[0], src_proj.shape[2], src_proj.shape[3], dtype=torch.bool, device=src_proj.device
+        )
 
-        # Run transformer
-        hs = self.transformer(src, mask, self.query_embed.weight, pos)
-        # hs is (decoder_output [num_layers, B, num_queries, d_model], memory)
-        hs = hs[0]  # [num_layers, B, num_queries, d_model]
+        # Run transformer — returns (decoder_output, memory)
+        hs, memory = self.transformer(src_proj, mask, self.query_embed.weight, pos)
 
         # Prediction heads (applied to all decoder layers)
         outputs_class = self.class_embed(hs)  # [num_layers, B, num_queries, num_classes+1]
@@ -134,6 +158,13 @@ class TerraTorchDETR(nn.Module):
         outputs = {"pred_logits": outputs_class[-1], "pred_boxes": outputs_coord[-1]}
         if self.aux_loss:
             outputs["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord)
+
+        # Mask head: generate per-query mask predictions
+        if self.masks:
+            bbox_mask = self.bbox_attention(hs[-1], memory, mask=mask)
+            fpns = [feature_list[-2], feature_list[-3], feature_list[-4]]
+            seg_masks = self.mask_head(src_proj, bbox_mask, fpns)
+            outputs["pred_masks"] = seg_masks.view(bs, self.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
 
         if self.training:
             if targets is None:
@@ -150,8 +181,11 @@ class TerraTorchDETR(nn.Module):
             return weighted
 
         # Eval: postprocess to list of dicts
-        target_sizes = torch.tensor([[img_h, img_w]], device=images.device).repeat(images.shape[0], 1)
-        return self.postprocessor(outputs, target_sizes)
+        target_sizes = torch.tensor([[img_h, img_w]], device=images.device).repeat(bs, 1)
+        results = self.postprocessor(outputs, target_sizes)
+        if self.masks:
+            self.postprocess_segm(results, outputs, target_sizes)
+        return results
 
 
 class TerraTorchDeformableDETR(nn.Module):
@@ -177,6 +211,7 @@ class TerraTorchDeformableDETR(nn.Module):
         eos_coef: float = 0.1,  # noqa: ARG002
         aux_loss: bool = True,  # noqa: FBT001, FBT002
         num_feature_levels: int | None = None,
+        masks: bool = False,  # noqa: FBT001, FBT002
     ):
         super().__init__()
         # Lazy import to avoid requiring CUDA extension when only DETR is used
@@ -190,6 +225,7 @@ class TerraTorchDeformableDETR(nn.Module):
         self.num_queries = num_queries
         self.d_model = d_model
         self.aux_loss = aux_loss
+        self.masks = masks
 
         n_backbone_outs = len(backbone.channel_list)
         n_levels = num_feature_levels if num_feature_levels is not None else n_backbone_outs
@@ -217,6 +253,23 @@ class TerraTorchDeformableDETR(nn.Module):
 
         # Sinusoidal positional encoding (shared across levels)
         self.position_embedding = PositionEmbeddingSine(d_model // 2, normalize=True)
+
+        # Mask head (instance segmentation)
+        if masks:
+            from terratorch.models.detr.segmentation import (  # noqa: PLC0415
+                MaskHeadSmallConv,
+                MHAttentionMap,
+                PostProcessSegm,
+            )
+
+            if len(backbone.channel_list) < 4:  # noqa: PLR2004
+                msg = f"Mask head requires at least 4 backbone feature levels, got {len(backbone.channel_list)}"
+                raise ValueError(msg)
+
+            self.bbox_attention = MHAttentionMap(d_model, d_model, nhead, dropout=0.0)
+            fpn_dims = list(reversed(backbone.channel_list[:-1]))
+            self.mask_head = MaskHeadSmallConv(d_model + nhead, fpn_dims, d_model)
+            self.postprocess_segm = PostProcessSegm()
 
         # Deformable Transformer
         self.transformer = DeformableTransformer(
@@ -260,11 +313,16 @@ class TerraTorchDeformableDETR(nn.Module):
         # Loss - Deformable DETR uses focal loss
         matcher = HungarianMatcher(cost_class=2, cost_bbox=5, cost_giou=2)
         base_weight_dict = {"loss_ce": 2, "loss_bbox": 5, "loss_giou": 2}
+        if masks:
+            base_weight_dict["loss_mask"] = 1
+            base_weight_dict["loss_dice"] = 1
         weight_dict = dict(base_weight_dict)
         if aux_loss:
             for i in range(num_decoder_layers - 1):
                 weight_dict.update({k + f"_{i}": v for k, v in base_weight_dict.items()})
         losses = ["labels", "boxes", "cardinality"]
+        if masks:
+            losses.append("masks")
         self.criterion = DeformSetCriterion(
             num_classes, matcher=matcher, weight_dict=weight_dict, losses=losses, focal_alpha=0.25
         )
@@ -355,6 +413,13 @@ class TerraTorchDeformableDETR(nn.Module):
         if self.aux_loss:
             out["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord)
 
+        # Mask head: use last-scale projected features as spatial key for bbox attention
+        if self.masks:
+            bbox_mask = self.bbox_attention(hs[-1], srcs[-1], mask=masks[-1])
+            fpns = list(reversed(feature_list[:-1]))
+            seg_masks = self.mask_head(srcs[-1], bbox_mask, fpns)
+            out["pred_masks"] = seg_masks.view(bs, self.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
+
         if self.training:
             if targets is None:
                 msg = "targets must be provided during training"
@@ -371,7 +436,248 @@ class TerraTorchDeformableDETR(nn.Module):
 
         # Eval: postprocess to list of dicts
         target_sizes = torch.tensor([[img_h, img_w]], device=images.device).repeat(bs, 1)
-        return self._postprocessor(out, target_sizes)
+        results = self._postprocessor(out, target_sizes)
+        if self.masks:
+            # Deformable DETR PostProcess selects top-k queries; select corresponding masks
+            with torch.no_grad():
+                prob = out["pred_logits"].sigmoid()
+                num_topk = min(100, prob.shape[1] * prob.shape[2])
+                topk_indexes = torch.topk(prob.view(prob.shape[0], -1), num_topk, dim=1).indices
+                topk_query_idx = topk_indexes // out["pred_logits"].shape[2]
+                pred_masks = out["pred_masks"]  # [B, Q, H_mask, W_mask]
+                selected_masks = torch.gather(
+                    pred_masks,
+                    1,
+                    topk_query_idx[:, :, None, None].expand(-1, -1, pred_masks.shape[-2], pred_masks.shape[-1]),
+                )
+            self.postprocess_segm(results, {"pred_masks": selected_masks}, target_sizes)
+        return results
+
+
+class TerraTorchRFDETR(nn.Module):
+    """Wraps RF-DETR (LW-DETR) for TerraTorch's ObjectDetectionModelFactory.
+
+    Accepts a BackboneWrapper, builds LWDETR Transformer/SetCriterion internally.
+    Forward: images [B,C,H,W] + optional targets -> loss dict (train) or prediction list (eval)
+
+    Unlike Deformable DETR, RF-DETR uses a decoder-only transformer with
+    pure-PyTorch MSDeformAttn (no CUDA extension needed).
+    """
+
+    def __init__(
+        self,
+        backbone: nn.Module,
+        num_classes: int,
+        in_channels: int = 3,  # noqa: ARG002
+        d_model: int = 256,
+        sa_nhead: int = 8,
+        ca_nhead: int = 8,
+        num_decoder_layers: int = 3,
+        dim_feedforward: int = 2048,
+        dropout: float = 0.0,
+        num_queries: int = 300,
+        aux_loss: bool = True,  # noqa: FBT001, FBT002
+        num_feature_levels: int | None = None,
+        dec_n_points: int = 4,
+        focal_alpha: float = 0.25,
+        # Loss weights
+        cls_loss_coef: float = 2.0,
+        bbox_loss_coef: float = 5.0,
+        giou_loss_coef: float = 2.0,
+        # RF-DETR specific
+        two_stage: bool = True,  # noqa: FBT001, FBT002
+        lite_refpoint_refine: bool = False,  # noqa: FBT001, FBT002
+        bbox_reparam: bool = True,  # noqa: FBT001, FBT002
+        use_varifocal_loss: bool = False,  # noqa: FBT001, FBT002
+        ia_bce_loss: bool = True,  # noqa: FBT001, FBT002
+        num_select: int = 300,
+        # Segmentation
+        segmentation_head: bool = False,  # noqa: FBT001, FBT002
+        mask_ce_loss_coef: float = 5.0,
+        mask_dice_loss_coef: float = 5.0,
+    ):
+        super().__init__()
+        from terratorch.models.detr.rfdetr.lwdetr import LWDETR  # noqa: PLC0415
+        from terratorch.models.detr.rfdetr.lwdetr import PostProcess as RFDETRPostProcess  # noqa: PLC0415
+        from terratorch.models.detr.rfdetr.lwdetr import SetCriterion as RFDETRSetCriterion  # noqa: PLC0415
+        from terratorch.models.detr.rfdetr.matcher import HungarianMatcher as RFDETRMatcher  # noqa: PLC0415
+        from terratorch.models.detr.rfdetr.position_encoding import (  # noqa: PLC0415
+            PositionEmbeddingSine as RFDETRPositionEmbedding,
+        )
+        from terratorch.models.detr.rfdetr.segmentation_head import SegmentationHead  # noqa: PLC0415
+        from terratorch.models.detr.rfdetr.transformer import Transformer as RFDETRTransformer  # noqa: PLC0415
+
+        self.backbone = backbone
+        self.num_classes = num_classes
+        self.num_queries = num_queries
+        self.d_model = d_model
+        self.aux_loss = aux_loss
+        self.two_stage = two_stage
+        self.bbox_reparam = bbox_reparam
+
+        n_backbone_outs = len(backbone.channel_list)
+        n_levels = num_feature_levels if num_feature_levels is not None else n_backbone_outs
+        self.num_feature_levels = n_levels
+
+        # Per-level input projections
+        input_proj_list = [
+            nn.Sequential(
+                nn.Conv2d(ch, d_model, kernel_size=1),
+                nn.GroupNorm(32, d_model),
+            )
+            for ch in backbone.channel_list
+        ]
+        # Stride-2 3x3 projections for extra levels beyond backbone outputs
+        in_ch = backbone.channel_list[-1]
+        for _ in range(n_levels - n_backbone_outs):
+            input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_ch, d_model, kernel_size=3, stride=2, padding=1),
+                    nn.GroupNorm(32, d_model),
+                )
+            )
+            in_ch = d_model
+        self.input_proj = nn.ModuleList(input_proj_list)
+
+        # Sinusoidal positional encoding (shared across levels)
+        self.position_embedding = RFDETRPositionEmbedding(d_model // 2, normalize=True)
+
+        # Segmentation head (optional)
+        seg_head_module = SegmentationHead(d_model, num_decoder_layers) if segmentation_head else None
+
+        # RF-DETR Transformer (decoder-only)
+        transformer = RFDETRTransformer(
+            d_model=d_model,
+            sa_nhead=sa_nhead,
+            ca_nhead=ca_nhead,
+            num_queries=num_queries,
+            num_decoder_layers=num_decoder_layers,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            return_intermediate_dec=True,
+            two_stage=two_stage,
+            num_feature_levels=n_levels,
+            dec_n_points=dec_n_points,
+            lite_refpoint_refine=lite_refpoint_refine,
+            bbox_reparam=bbox_reparam,
+        )
+
+        # Build LWDETR model (no backbone - we handle that)
+        self.lwdetr = LWDETR(
+            transformer,
+            seg_head_module,
+            num_classes=num_classes,
+            num_queries=num_queries,
+            aux_loss=aux_loss,
+            two_stage=two_stage,
+            lite_refpoint_refine=lite_refpoint_refine,
+            bbox_reparam=bbox_reparam,
+        )
+
+        # Init input projections
+        for proj in self.input_proj:
+            nn.init.xavier_uniform_(proj[0].weight, gain=1)
+            nn.init.constant_(proj[0].bias, 0)
+
+        # Loss
+        matcher = RFDETRMatcher(
+            cost_class=cls_loss_coef,
+            cost_bbox=bbox_loss_coef,
+            cost_giou=giou_loss_coef,
+            focal_alpha=focal_alpha,
+        )
+        weight_dict = {"loss_ce": cls_loss_coef, "loss_bbox": bbox_loss_coef, "loss_giou": giou_loss_coef}
+        if segmentation_head:
+            weight_dict["loss_mask_ce"] = mask_ce_loss_coef
+            weight_dict["loss_mask_dice"] = mask_dice_loss_coef
+        if aux_loss:
+            aux_weight_dict = {}
+            for i in range(num_decoder_layers - 1):
+                aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
+            if two_stage:
+                aux_weight_dict.update({k + "_enc": v for k, v in weight_dict.items()})
+            weight_dict.update(aux_weight_dict)
+        losses = ["labels", "boxes", "cardinality"]
+        if segmentation_head:
+            losses.append("masks")
+        self.criterion = RFDETRSetCriterion(
+            num_classes,
+            matcher=matcher,
+            weight_dict=weight_dict,
+            focal_alpha=focal_alpha,
+            losses=losses,
+            use_varifocal_loss=use_varifocal_loss,
+            ia_bce_loss=ia_bce_loss,
+        )
+
+        self._postprocessor = RFDETRPostProcess(num_select=num_select)
+
+    def forward(self, images: Tensor, targets: list[dict] | None = None) -> dict[str, Tensor] | list[dict[str, Tensor]]:
+        """Forward pass.
+
+        Args:
+            images: [B, C, H, W] input images.
+            targets: Training targets, list of dicts with 'boxes' (xyxy abs) and 'labels'.
+
+        Returns:
+            Training: dict of losses.
+            Eval: list of dicts with 'boxes' (xyxy), 'scores', 'labels'.
+        """
+        bs, _, img_h, img_w = images.shape
+
+        # Extract multi-scale features from backbone
+        features = self.backbone(images)
+        if isinstance(features, OrderedDict):
+            feature_list = list(features.values())
+        else:
+            feature_list = features
+
+        # Project each backbone level and collect spatial info
+        srcs = []
+        masks = []
+        pos_embeds = []
+        for lvl, feat in enumerate(feature_list):
+            src = self.input_proj[lvl](feat)
+            mask = torch.zeros(src.shape[0], src.shape[2], src.shape[3], dtype=torch.bool, device=src.device)
+            pos = self.position_embedding(src)
+            srcs.append(src)
+            masks.append(mask)
+            pos_embeds.append(pos)
+
+        # Generate extra feature levels beyond backbone outputs
+        if self.num_feature_levels > len(feature_list):
+            _len_srcs = len(feature_list)
+            for lvl in range(_len_srcs, self.num_feature_levels):
+                if lvl == _len_srcs:
+                    src = self.input_proj[lvl](feature_list[-1])
+                else:
+                    src = self.input_proj[lvl](srcs[-1])
+                mask = torch.zeros(src.shape[0], src.shape[2], src.shape[3], dtype=torch.bool, device=src.device)
+                pos = self.position_embedding(src, mask)
+                srcs.append(src)
+                masks.append(mask)
+                pos_embeds.append(pos)
+
+        # Run LWDETR model
+        outputs = self.lwdetr(srcs, masks, pos_embeds)
+
+        if self.training:
+            if targets is None:
+                msg = "targets must be provided during training"
+                raise ValueError(msg)
+            # Convert targets from xyxy absolute to cxcywh normalized for loss computation
+            processed_targets = _convert_targets_for_loss(targets, img_h, img_w, images.device)
+            loss_dict = self.criterion(outputs, processed_targets)
+            # Weight losses
+            weighted = {}
+            for k, v in loss_dict.items():
+                if k in self.criterion.weight_dict:
+                    weighted[k] = v * self.criterion.weight_dict[k]
+            return weighted
+
+        # Eval: postprocess to list of dicts
+        target_sizes = torch.tensor([[img_h, img_w]], device=images.device).repeat(bs, 1)
+        return self._postprocessor(outputs, target_sizes)
 
 
 def _convert_targets_for_loss(targets: list[dict], img_h: int, img_w: int, device: torch.device) -> list[dict]:
@@ -399,5 +705,8 @@ def _convert_targets_for_loss(targets: list[dict], img_h: int, img_w: int, devic
         boxes_norm[:, 1::2] /= img_h
         # Convert from xyxy to cxcywh
         boxes_cxcywh = box_convert(boxes_norm, "xyxy", "cxcywh")
-        processed.append({"labels": t["labels"].to(device), "boxes": boxes_cxcywh})
+        result = {"labels": t["labels"].to(device), "boxes": boxes_cxcywh}
+        if "masks" in t:
+            result["masks"] = t["masks"].to(device)
+        processed.append(result)
     return processed
