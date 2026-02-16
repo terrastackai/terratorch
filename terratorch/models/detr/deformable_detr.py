@@ -18,6 +18,7 @@ from torch import nn
 from torchvision.ops import box_convert, generalized_box_iou
 
 from terratorch.models.detr.deformable_transformer import _inverse_sigmoid
+from terratorch.models.detr.dist_utils import get_world_size, is_dist_avail_and_initialized
 
 
 def _get_clones(module, num_clones):
@@ -131,6 +132,12 @@ class DeformableDETR(nn.Module):
         Returns:
             dict with 'pred_logits' and 'pred_boxes', optionally 'aux_outputs' and 'enc_outputs'.
         """
+        # NOTE: This adapted forward() receives already-projected srcs (d_model channels).
+        # The first extra level's input_proj expects raw backbone channels, which creates a
+        # dimension mismatch when num_feature_levels > len(srcs). Additionally, positional
+        # encodings are reused rather than freshly generated. Use TerraTorchDeformableDETR
+        # wrapper instead, which handles extra levels correctly with access to raw backbone
+        # features.
         if self.num_feature_levels > len(srcs):
             _len_srcs = len(srcs)
             for lvl in range(_len_srcs, self.num_feature_levels):
@@ -324,7 +331,9 @@ class SetCriterion(nn.Module):
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        num_boxes = torch.clamp(num_boxes, min=1).item()
+        if is_dist_avail_and_initialized():
+            torch.distributed.all_reduce(num_boxes)
+        num_boxes = torch.clamp(num_boxes / get_world_size(), min=1).item()
 
         # Compute all the requested losses
         losses = {}

@@ -24,17 +24,18 @@ class PositionEmbeddingSine(nn.Module):
             scale = 2 * math.pi
         self.scale = scale
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         """Generate positional encoding.
 
         Args:
             x: Feature map tensor [B, C, H, W].
+            mask: Optional binary mask [B, H, W]. If None, an all-False mask is created.
 
         Returns:
             Positional encoding [B, num_pos_feats*2, H, W].
         """
-        # Create an all-False mask (no padding) from the spatial dims
-        mask = torch.zeros(x.shape[0], x.shape[2], x.shape[3], dtype=torch.bool, device=x.device)
+        if mask is None:
+            mask = torch.zeros(x.shape[0], x.shape[2], x.shape[3], dtype=torch.bool, device=x.device)
         not_mask = ~mask
         y_embed = not_mask.cumsum(1, dtype=torch.float32)
         x_embed = not_mask.cumsum(2, dtype=torch.float32)

@@ -45,11 +45,13 @@ class TerraTorchDETR(nn.Module):
         dropout: float = 0.1,
         num_queries: int = 100,
         eos_coef: float = 0.1,
+        aux_loss: bool = False,  # noqa: FBT001, FBT002
     ):
         super().__init__()
         self.backbone = backbone
         self.num_classes = num_classes
         self.num_queries = num_queries
+        self.aux_loss = aux_loss
 
         backbone_out_channels = backbone.out_channels
         self.input_proj = nn.Conv2d(backbone_out_channels, d_model, kernel_size=1)
@@ -62,7 +64,7 @@ class TerraTorchDETR(nn.Module):
             num_decoder_layers=num_decoder_layers,
             dim_feedforward=dim_feedforward,
             dropout=dropout,
-            return_intermediate_dec=False,
+            return_intermediate_dec=aux_loss,
         )
 
         self.query_embed = nn.Embedding(num_queries, d_model)
@@ -71,13 +73,24 @@ class TerraTorchDETR(nn.Module):
 
         # Loss
         matcher = HungarianMatcher(cost_class=1, cost_bbox=5, cost_giou=2)
-        weight_dict = {"loss_ce": 1, "loss_bbox": 5, "loss_giou": 2}
+        base_weight_dict = {"loss_ce": 1, "loss_bbox": 5, "loss_giou": 2}
+        weight_dict = dict(base_weight_dict)
+        if aux_loss:
+            for i in range(num_decoder_layers - 1):
+                weight_dict.update({k + f"_{i}": v for k, v in base_weight_dict.items()})
         losses = ["labels", "boxes", "cardinality"]
         self.criterion = DETRSetCriterion(
             num_classes, matcher=matcher, weight_dict=weight_dict, eos_coef=eos_coef, losses=losses
         )
 
         self.postprocessor = DETRPostProcess()
+
+    @torch.jit.unused
+    def _set_aux_loss(self, outputs_class, outputs_coord):
+        """Return auxiliary outputs for intermediate decoder layers."""
+        return [
+            {"pred_logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1], strict=False)
+        ]
 
     def forward(self, images: Tensor, targets: list[dict] | None = None) -> dict[str, Tensor] | list[dict[str, Tensor]]:
         """Forward pass.
@@ -110,15 +123,17 @@ class TerraTorchDETR(nn.Module):
 
         # Run transformer
         hs = self.transformer(src, mask, self.query_embed.weight, pos)
-        # hs is (decoder_output [1, B, num_queries, d_model], memory)
-        hs = hs[0]  # [1, B, num_queries, d_model]
+        # hs is (decoder_output [num_layers, B, num_queries, d_model], memory)
+        hs = hs[0]  # [num_layers, B, num_queries, d_model]
 
-        # Prediction heads
-        pred_logits = self.class_embed(hs)  # [1, B, num_queries, num_classes+1]
-        pred_boxes = self.bbox_embed(hs).sigmoid()  # [1, B, num_queries, 4] in cxcywh normalized
+        # Prediction heads (applied to all decoder layers)
+        outputs_class = self.class_embed(hs)  # [num_layers, B, num_queries, num_classes+1]
+        outputs_coord = self.bbox_embed(hs).sigmoid()  # [num_layers, B, num_queries, 4]
 
         # Use last decoder layer output
-        outputs = {"pred_logits": pred_logits[-1], "pred_boxes": pred_boxes[-1]}
+        outputs = {"pred_logits": outputs_class[-1], "pred_boxes": outputs_coord[-1]}
+        if self.aux_loss:
+            outputs["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord)
 
         if self.training:
             if targets is None:
@@ -160,6 +175,8 @@ class TerraTorchDeformableDETR(nn.Module):
         num_queries: int = 300,
         n_points: int = 4,
         eos_coef: float = 0.1,  # noqa: ARG002
+        aux_loss: bool = True,  # noqa: FBT001, FBT002
+        num_feature_levels: int | None = None,
     ):
         super().__init__()
         # Lazy import to avoid requiring CUDA extension when only DETR is used
@@ -172,19 +189,31 @@ class TerraTorchDeformableDETR(nn.Module):
         self.num_classes = num_classes
         self.num_queries = num_queries
         self.d_model = d_model
+        self.aux_loss = aux_loss
 
-        n_levels = len(backbone.channel_list)
+        n_backbone_outs = len(backbone.channel_list)
+        n_levels = num_feature_levels if num_feature_levels is not None else n_backbone_outs
+        self.num_feature_levels = n_levels
 
-        # Per-level input projections
-        self.input_proj = nn.ModuleList(
-            [
+        # Per-level input projections (1x1 for backbone levels)
+        input_proj_list = [
+            nn.Sequential(
+                nn.Conv2d(ch, d_model, kernel_size=1),
+                nn.GroupNorm(32, d_model),
+            )
+            for ch in backbone.channel_list
+        ]
+        # Stride-2 3x3 projections for extra levels beyond backbone outputs
+        in_ch = backbone.channel_list[-1]
+        for _ in range(n_levels - n_backbone_outs):
+            input_proj_list.append(
                 nn.Sequential(
-                    nn.Conv2d(ch, d_model, kernel_size=1),
+                    nn.Conv2d(in_ch, d_model, kernel_size=3, stride=2, padding=1),
                     nn.GroupNorm(32, d_model),
                 )
-                for ch in backbone.channel_list
-            ]
-        )
+            )
+            in_ch = d_model
+        self.input_proj = nn.ModuleList(input_proj_list)
 
         # Sinusoidal positional encoding (shared across levels)
         self.position_embedding = PositionEmbeddingSine(d_model // 2, normalize=True)
@@ -230,13 +259,24 @@ class TerraTorchDeformableDETR(nn.Module):
 
         # Loss - Deformable DETR uses focal loss
         matcher = HungarianMatcher(cost_class=2, cost_bbox=5, cost_giou=2)
-        weight_dict = {"loss_ce": 2, "loss_bbox": 5, "loss_giou": 2}
+        base_weight_dict = {"loss_ce": 2, "loss_bbox": 5, "loss_giou": 2}
+        weight_dict = dict(base_weight_dict)
+        if aux_loss:
+            for i in range(num_decoder_layers - 1):
+                weight_dict.update({k + f"_{i}": v for k, v in base_weight_dict.items()})
         losses = ["labels", "boxes", "cardinality"]
         self.criterion = DeformSetCriterion(
             num_classes, matcher=matcher, weight_dict=weight_dict, losses=losses, focal_alpha=0.25
         )
 
         self._postprocessor = DeformPostProcess()
+
+    @torch.jit.unused
+    def _set_aux_loss(self, outputs_class, outputs_coord):
+        """Return auxiliary outputs for intermediate decoder layers."""
+        return [
+            {"pred_logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1], strict=False)
+        ]
 
     def forward(self, images: Tensor, targets: list[dict] | None = None) -> dict[str, Tensor] | list[dict[str, Tensor]]:
         """Forward pass.
@@ -260,7 +300,7 @@ class TerraTorchDeformableDETR(nn.Module):
         else:
             feature_list = features
 
-        # Project each level and collect spatial info
+        # Project each backbone level and collect spatial info
         srcs = []
         masks = []
         pos_embeds = []
@@ -271,6 +311,20 @@ class TerraTorchDeformableDETR(nn.Module):
             srcs.append(src)
             masks.append(mask)
             pos_embeds.append(pos)
+
+        # Generate extra feature levels beyond backbone outputs
+        if self.num_feature_levels > len(feature_list):
+            _len_srcs = len(feature_list)
+            for lvl in range(_len_srcs, self.num_feature_levels):
+                if lvl == _len_srcs:
+                    src = self.input_proj[lvl](feature_list[-1])
+                else:
+                    src = self.input_proj[lvl](srcs[-1])
+                mask = torch.zeros(src.shape[0], src.shape[2], src.shape[3], dtype=torch.bool, device=src.device)
+                pos = self.position_embedding(src, mask)
+                srcs.append(src)
+                masks.append(mask)
+                pos_embeds.append(pos)
 
         # Run transformer
         hs, init_reference, inter_references, _, _ = self.transformer(srcs, masks, pos_embeds, self.query_embed.weight)
@@ -298,6 +352,8 @@ class TerraTorchDeformableDETR(nn.Module):
         outputs_coord = torch.stack(outputs_coords)
 
         out = {"pred_logits": outputs_class[-1], "pred_boxes": outputs_coord[-1]}
+        if self.aux_loss:
+            out["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord)
 
         if self.training:
             if targets is None:
