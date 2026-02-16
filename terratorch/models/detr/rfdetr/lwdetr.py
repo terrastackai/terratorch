@@ -252,8 +252,7 @@ class SetCriterion(nn.Module):
             pos_weights = torch.zeros_like(src_logits)
             neg_weights = prob**gamma
 
-            pos_ind = list(idx)
-            pos_ind.append(target_classes_o)
+            pos_ind = (*idx, target_classes_o)
 
             t = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)
             t = torch.clamp(t, 0.01).detach()
@@ -311,8 +310,7 @@ class SetCriterion(nn.Module):
                 device=src_logits.device,
             )
 
-            pos_ind = list(idx)
-            pos_ind.append(target_classes_o)
+            pos_ind = (*idx, target_classes_o)
             cls_iou_targets[pos_ind] = pos_ious
             loss_ce = (
                 sigmoid_varifocal_loss(src_logits, cls_iou_targets, num_boxes, alpha=self.focal_alpha, gamma=2)
