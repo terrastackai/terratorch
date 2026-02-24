@@ -214,8 +214,8 @@ class GenericNonGeoSegmentationDataModule(NonGeoDataModule):
         self.check_stackability = check_stackability
 
         if tortilla_file is None and not all([
-            train_data_root, 
-            val_data_root, 
+            train_data_root,
+            val_data_root,
             test_data_root
             ]
         ):

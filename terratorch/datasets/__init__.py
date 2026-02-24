@@ -63,6 +63,9 @@ from terratorch.datasets.m_VHR10 import mVHR10
 
 from terratorch.datasets.substation import Substation
 
+# Giovanni Montefoschi thesis dataset
+from terratorch.datasets.multi_temporal_crop_custom_classification import CDLMultiTemporalCropClassification
+
 # Surya datasets
 try:
     from terratorch.datasets.helio import HelioNetCDFDataset
@@ -89,6 +92,7 @@ __all__ = (
     "FireScarsSegmentationMask",
     "Sen1Floods11NonGeo",
     "MultiTemporalCropClassification",
+    "CDLMultiTemporalCropClassification",
     "Sen4MapDatasetMonthlyComposites",
     "HLSBands",
     "MEuroSATNonGeo",

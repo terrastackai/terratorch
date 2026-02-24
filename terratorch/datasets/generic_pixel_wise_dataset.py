@@ -124,8 +124,7 @@ class GenericPixelWiseDataset(NonGeoDataset, ABC):
 
             if dataset_bands is None:
                 raise ValueError(
-                    "Please provide dataset_bands when expand_temporal_dimension=True."
-                )
+                    "Please provide dataset_bands when expand_temporal_dimension=True.")
 
         self.tortilla_df = tortilla_df
         if tortilla_indices is None and self.tortilla_df is not None:
@@ -179,7 +178,7 @@ class GenericPixelWiseDataset(NonGeoDataset, ABC):
             # we need to provide a way to run the dataloder in these cases.
             if not self.segmentation_mask_files:
                 self.segmentation_mask_files = self.image_files
-                # The masks can be `None` since they won't be used in fact. 
+                # The masks can be `None` since they won't be used in fact.
 
         self.rgb_indices = [0, 1, 2] if rgb_indices is None else rgb_indices
 

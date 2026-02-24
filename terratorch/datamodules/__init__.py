@@ -66,6 +66,9 @@ except ImportError:
 
 # miscellaneous datamodules
 
+# Giovanni Montefoschi thesis datamodule
+from terratorch.datamodules.multi_temporal_crop_custom_classification import CDLMultiTemporalCropClassificationDataModule
+
 # Generic classification datamodule
 from terratorch.datamodules.m_VHR10 import mVHR10DataModule
 from terratorch.datamodules.sen4map import Sen4MapLucasDataModule
@@ -90,6 +93,7 @@ __all__ = (
     "Sen4MapLucasDataModule",
     "FireScarsNonGeoDataModule",
     "MultiTemporalCropClassificationDataModule",
+    "CDLMultitemporalCropClassificationDataModule"
     "TorchGeoDataModule",
     "TorchNonGeoDataModule",
     "MEuroSATNonGeoDataModule",
