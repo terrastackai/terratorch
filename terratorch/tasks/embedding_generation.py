@@ -55,13 +55,13 @@ class EmbeddingGenerationTask(TerraTorchTask):
         """
         self.output_format = output_format.lower()
 
-        if self.output_format not in ("tiff", "parquet", "parquet_joint"):
+        if self.output_format not in ("tiff", "parquet", "parquet_joint", "neuco_csv"):
             raise ValueError(
                 f"Unsupported output format: {self.output_format}. "
-                "Supported formats are 'tiff', 'parquet', 'parquet_joint'."
+                "Supported formats are 'tiff', 'parquet', 'parquet_joint', 'neuco_csv."
             )
-        # For joint parquet, part files are written which are kept track off and are joint at the end
-        if self.output_format == "parquet_joint":
+        # For joint parquet/ neuco_csv, part files are written which are kept track off and are joint at the end
+        if self.output_format in ("parquet_joint", "neuco_csv"):
             self._part_idx = {f"{i:02d}": None for i in range(len(layers))}
             self._part_dir = {f"{i:02d}": None for i in range(len(layers))}
 
@@ -99,7 +99,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
                         "remove_cls_token": self.has_cls,
                     }
 
-                    if model_args.get("backbone_use_temporal", False):
+                    if model_args.get("backbone_use_temporal", False) and model_args.get("backbone_temporal_pooling", 'mean') == "keep":
                         neck_cfg["temporal_inputs"] = True
 
                     model_args["necks"].append(neck_cfg)
@@ -114,14 +114,17 @@ class EmbeddingGenerationTask(TerraTorchTask):
                         "Please set an embedding pooling mode (e.g., mean, max, or cls) or choose a different output format."
                     )
             elif embedding_pooling in ["mean", "max", "min", "cls"]:
-                model_args["necks"] = [
-                    {
+                model_args["necks"] = []
+                neck_cfg = {
                         "name": "AggregateTokens",
                         "pooling": embedding_pooling,
                         "indices": self.embedding_indices,
                         "drop_cls": has_cls
                     }
-                ]
+                if model_args.get("backbone_use_temporal", False) and model_args.get("backbone_temporal_pooling",'mean') == "keep":
+                    neck_cfg["temporal_inputs"] = True
+                model_args["necks"].append(neck_cfg)
+
                 if self.output_format == "tiff":
                     warnings.warn("GeoTIFF output not recommended with embedding pooling, saves 1D vectors as (C,1,1).")
             else:
@@ -245,6 +248,9 @@ class EmbeddingGenerationTask(TerraTorchTask):
             else:   
                 metadata = self.pull_metadata(batch)
 
+        if isinstance(file_ids, dict):
+            file_ids = next(iter(file_ids.values()))
+
         self.check_file_ids(file_ids, x)
         embeddings = self(x)
         if not isinstance(embeddings, list):
@@ -257,6 +263,8 @@ class EmbeddingGenerationTask(TerraTorchTask):
     def on_predict_end(self) -> None:
         if self.output_format == "parquet_joint":
             self.join_parquet_files()
+        elif self.output_format == "neuco_csv":
+            self.join_neuco_parts_to_csv()
 
     def save_embeddings(
         self,
@@ -335,6 +343,10 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
         if self.output_format == "parquet_joint":
             self.write_parquet_batch(emb_np, file_ids, metadata, is_temporal, dir_path)
+            return
+
+        if self.output_format == "neuco_csv":
+            self.write_neuco_parquet_batch(emb_np, file_ids, dir_path)
             return
 
         tasks = list(self.iter_samples(emb_np, file_ids, metadata, is_temporal))
@@ -716,3 +728,70 @@ class EmbeddingGenerationTask(TerraTorchTask):
                     p.unlink()
                 except OSError:
                     pass
+
+    def join_neuco_parts_to_csv(self) -> None:
+        """Join NeuCo part parquet files into final CSV with exact format: id + 1..D columns."""
+        for l_key in self._part_dir.keys():
+            if self._part_dir[l_key] is None:
+                continue
+
+            parts = sorted(self._part_dir[l_key].glob("embeddings_part_*.parquet"))
+            if not parts:
+                raise FileNotFoundError(
+                    f"No part files found in {self._part_dir[l_key]} matching embeddings_part_*.parquet"
+                )
+
+            dfs = [pd.read_parquet(p) for p in parts]
+            out = pd.concat(dfs, ignore_index=True)
+
+            # Ensure exact column order: 'id' then '1'..'D' (as strings)
+            if "id" not in out.columns:
+                raise ValueError("NeuCo output missing required 'id' column.")
+            dim_cols = [c for c in out.columns if c != "id"]
+            dim_cols_sorted = sorted(dim_cols, key=lambda s: int(s))  # '1','2',...
+            out = out[["id"] + dim_cols_sorted]
+
+            csv_path = self._part_dir[l_key] / "embeddings.csv"
+            out.to_csv(csv_path, index=False)
+
+            # cleanup parts
+            for p in parts:
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+
+    def write_neuco_parquet_batch(
+            self,
+            emb_np: np.ndarray,  # (B, D)
+            file_ids: list[str],  # length B
+            dir_path: Path,
+    ) -> None:
+        """Append/ Create NeuCo-Bench CSV (id + dim columns).
+        """
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+        if emb_np.ndim != 2:
+            raise ValueError(
+                f"NeuCo-Bench CSV output requires a (B, D) array (Batch, 1D vector), got {emb_np.shape}. "
+                "Provide 'embedding_pooling' to reduce to 1D."
+            )
+        B, D = emb_np.shape
+        if len(file_ids) != B:
+            raise ValueError(f"len(file_ids) must match B. Got {len(file_ids)} vs {B}")
+
+        ids = [Path(Path(f).stem).stem for f in file_ids]
+        emb_2d = np.asarray(emb_np, dtype=np.float32)
+
+        df = pd.DataFrame(emb_2d, columns=[str(i) for i in range(1, D + 1)])
+        df.insert(0, "id", ids)
+
+        # track parts per layer dir (same pattern as parquet_joint)
+        l_key = dir_path.as_posix().split("layer_")[1]
+        if self._part_idx[l_key] is None:
+            self._part_idx[l_key] = 0
+            self._part_dir[l_key] = dir_path
+
+        part_path = dir_path / f"embeddings_part_{self._part_idx[l_key]:06d}.parquet"
+        self._part_idx[l_key] += 1
+        df.to_parquet(part_path, index=False)

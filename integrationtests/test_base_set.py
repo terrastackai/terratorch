@@ -6,10 +6,13 @@ import shutil
 import subprocess
 import time
 from datetime import datetime
+from typing import Any
 
 import lightning.pytorch as pl
+import numpy as np
 import pandas as pd
 import pytest
+import rasterio
 import requests
 import torch
 from huggingface_hub import hf_hub_download, snapshot_download
@@ -20,7 +23,6 @@ from terratorch.datasets import HelioNetCDFDataset
 from terratorch.registry import BACKBONE_REGISTRY
 from terratorch.tasks import InferenceTask
 
-
 # Allow overriding default test asset locations via environment variables.
 TEST_MODELS_ROOT = os.getenv(
     "TERRATORCH_TEST_MODELS_ROOT",
@@ -28,6 +30,7 @@ TEST_MODELS_ROOT = os.getenv(
 )
 TMP_ROOT = os.getenv("TERRATORCH_TMP_ROOT", "/dccstor/terratorch/tmp")
 TEST_CHECKPOINTS_ROOT = os.getenv("TERRATORCH_TEST_CHECKPOINTS_ROOT", TEST_MODELS_ROOT)
+
 
 def free_gpu():
     try:
@@ -54,7 +57,7 @@ def free_gpu():
         "encoderdecoder_timm_convnext_large-fb-in22k_model_factory",
         "encoderdecoder_timm_convnext_xlarge-fb-in22k_model_factory",
         "terramind_base",
-        "terramind_large"
+        "terramind_large",
     ],
 )
 def test_models_fit(model_name):
@@ -66,7 +69,6 @@ def test_models_fit(model_name):
     )
     torch.cuda.empty_cache()
     free_gpu()
-
 
     # Print the captured output
     print("STDOUT:", result.stdout)
@@ -152,28 +154,65 @@ def burnscars_image(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def floods_image(tmp_path_factory):
+def floods_image_dir(tmp_path_factory):
+    """Download and extract the floods image into temp directory."""
     url = "https://s3.us-east.cloud-object-storage.appdomain.cloud/geospatial-studio-example-data/examples-for-inference/montenegro-brazil-floods-20231120-S1L2A.wgs84.tif"
     temp_dir = tmp_path_factory.mktemp("data")
-    local_path = temp_dir / "floods_image.tif"
+    local_path: Any = temp_dir / "floods_image.tif"
 
     download_and_open_tiff(url=url, dest_path=local_path)
+    with rasterio.open(local_path) as src:
+        # Get metadata
+        profile = src.profile.copy()
 
-    return str(local_path)
+        s2_bands = list(range(1, 7))  # Bands 1-6 (rasterio is 1-indexed)
+        s2_data = src.read(s2_bands)
+
+        # Use bands 1-6, then repeat them to get to 13 bands
+        s2_extended = []
+        for i in range(13):
+            band_idx = i % 6
+            s2_extended.append(s2_data[band_idx])
+        s2_extended = np.array(s2_extended)
+
+        s2_output = temp_dir / "flood_image_S2Hand.tif"
+        profile.update(count=13)
+        with rasterio.open(s2_output, "w", **profile) as dst:
+            dst.write(s2_extended)
+
+        # S1 needs 2 bands - use last band duplicated
+        s1_band = src.read(7)  # Last band
+        s1_data = np.array([s1_band, s1_band])  # Duplicate to get 2 bands
+
+        s1_output = temp_dir / "flood_image_S1Hand.tif"
+        profile.update(count=2)
+        with rasterio.open(s1_output, "w", **profile) as dst:
+            dst.write(s1_data)
+
+    return str(temp_dir)
 
 
 def run_inference(config, checkpoint, image):
     model = LightningInferenceModel.from_config(config_path=config, checkpoint_path=checkpoint)
+
     predictions = model.inference(image)
 
     return predictions
+
+
+def run_inference_on_dir(config, checkpoint, image_dir):
+    model = LightningInferenceModel.from_config(config_path=config, checkpoint_path=checkpoint)
+
+    predictions, file_names = model.inference_on_dir(image_dir)
+
+    return predictions, file_names
 
 
 @pytest.mark.parametrize(
     "model_name",
     ["eo_v1_100", "eo_v2_300", "eo_v2_600", "smp_resnet34_model_factory", "encoderdecoder_resnet34_model_factory"],
 )
-def test_buildings_predict(buildings_image, model_name):
+def test_legacy_buildings_predict(buildings_image, model_name):
     # Models trained with an earlier terratorch version
     model_dir = os.path.join(TEST_MODELS_ROOT, f"buildings_{model_name}")
     config_path = os.path.join(model_dir, f"config_{model_name}.yaml")
@@ -186,15 +225,16 @@ def test_buildings_predict(buildings_image, model_name):
 
     gc.collect()
 
+
 @pytest.mark.parametrize("model_name", ["terramind_base"])
-def test_floods_predict(floods_image, model_name):
+def test_legacy_floods_predict(floods_image_dir, model_name):
     # Terramind models trained with tt version==1.1
     model_dir = os.path.join(TEST_MODELS_ROOT, f"floods_{model_name}")
     config_path = os.path.join(model_dir, f"config_{model_name}.yaml")
     checkpoint_dir = os.path.join(TEST_CHECKPOINTS_ROOT, f"floods_{model_name}")
     checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{model_name}.ckpt")
 
-    preds = run_inference(config=config_path, checkpoint=checkpoint_path, image=floods_image)
+    preds, file_names = run_inference_on_dir(config=config_path, checkpoint=checkpoint_path, image_dir=floods_image_dir)
 
     assert isinstance(preds, torch.Tensor), f"Expected predictions to be type torch.Tensor, got {type(preds)}"
 
@@ -202,7 +242,7 @@ def test_floods_predict(floods_image, model_name):
 
 
 @pytest.mark.parametrize("model_name", ["swinb", "swinl"])
-def test_burnscars_predict(burnscars_image, model_name):
+def test_legacy_burnscars_predict(burnscars_image, model_name):
     # Models trained with an earlier terratorch version
     model_dir = os.path.join(TEST_MODELS_ROOT, f"burnscars_{model_name}")
     config_path = os.path.join(model_dir, f"config_{model_name}.yaml")
@@ -325,8 +365,8 @@ def test_surya():
 ## current terratorch version runs inference successfully
 
 
-@pytest.mark.parametrize("config_name", ["smp_resnet34", "enc_dec_resnet34"])
-def test_current_terratorch_version_buildings_predict(config_name, buildings_image):
+@pytest.mark.parametrize("config_name", ["smp_resnet34", "timm_resnet34"])
+def test_latest_terratorch_version_buildings_predict(config_name, buildings_image):
     # Models trained with current terratorch version
     config_path = os.path.join(TMP_ROOT, config_name, "lightning_logs", "version_0", "config_deploy.yaml")
 
@@ -339,20 +379,20 @@ def test_current_terratorch_version_buildings_predict(config_name, buildings_ima
 
     gc.collect()
 
-@pytest.mark.parametrize("config_name", [ "terramind_base","terramind_large"])
-def test_current_terratorch_version_floods_predict(config_name, floods_image):
+
+@pytest.mark.parametrize("config_name", ["terramind_base", "terramind_large"])
+def test_latest_terratorch_version_floods_predict(config_name, floods_image_dir):
     # Models trained with current terratorch version
     config_path = os.path.join(TMP_ROOT, config_name, "lightning_logs", "version_0", "config_deploy.yaml")
 
     pattern = os.path.join(TMP_ROOT, config_name, "best-state_dict-epoch=*.ckpt")
     checkpoint_path = glob.glob(pattern)[0]
 
-    preds = run_inference(config=config_path, checkpoint=checkpoint_path, image=floods_image)
+    preds, file_names = run_inference_on_dir(config=config_path, checkpoint=checkpoint_path, image_dir=floods_image_dir)
 
     assert isinstance(preds, torch.Tensor), f"Expected predictions to be type torch.Tensor, got {type(preds)}"
 
     gc.collect()
-
 
 
 @pytest.mark.parametrize(
@@ -363,7 +403,6 @@ def test_current_terratorch_version_floods_predict(config_name, floods_image):
         "eo_v2_600",
         "swinb",
         "swinl",
-        "timm_resnet34",
         "timm_resnet18",
         "timm_resnet50",
         "timm_resnet101",
@@ -374,7 +413,7 @@ def test_current_terratorch_version_floods_predict(config_name, floods_image):
     ],
 )
 # Models trained with current terratorch version
-def test_current_terratorch_version_burnscars_predict(config_name, burnscars_image):
+def test_latest_terratorch_version_burnscars_predict(config_name, burnscars_image):
     # config_path = f"configs/test_{config_name}.yaml"
     config_path = os.path.join(TMP_ROOT, config_name, "lightning_logs", "version_0", "config_deploy.yaml")
 
@@ -397,7 +436,6 @@ def test_current_terratorch_version_burnscars_predict(config_name, burnscars_ima
         "swinb",
         "swinl",
         "smp_resnet34",
-        "enc_dec_resnet34",
         "timm_resnet34",
         "timm_resnet18",
         "timm_resnet50",
@@ -428,4 +466,3 @@ def test_cleanup(model_name):
     assert not os.path.exists(full_path)
 
     gc.collect()
-

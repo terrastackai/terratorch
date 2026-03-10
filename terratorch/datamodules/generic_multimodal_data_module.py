@@ -210,6 +210,7 @@ class GenericMultiModalDataModule(NonGeoDataModule):
         label_data_root: Path | str | None = None,
         image_grep: str | dict[str, str] | None = None,
         label_grep: str | None = None,
+        prefix: str | None = None,
         train_split: Path | str | None = None,
         val_split: Path | str | None = None,
         test_split: Path| str | None = None,
@@ -274,6 +275,7 @@ class GenericMultiModalDataModule(NonGeoDataModule):
                 images, with modalities as keys. Only supports wildcards (*) at the beginning. Defaults to "*".
             label_grep (str, optional): Regular expression appended to label_data_root to find labels or mask files.
                 Defaults to "*". Ignored when allow_substring_file_names is False.
+            prefix (str, optional): Prefix for filenames and/ or in case of data in subdirs (e.g. "part-xxx). Defaults to "*".
             train_split (Path, optional): Path to file containing training samples prefixes to be used for this split.
                 The file can be a csv/parquet file with the prefixes in the index or a txt file with new-line separated
                 sample prefixes. File names must be exact matches if allow_substring_file_names is False. Otherwise,
@@ -405,6 +407,7 @@ class GenericMultiModalDataModule(NonGeoDataModule):
             raise ValueError(f"GenericMultiModalDataModule can only handle label_grep with suffixes "
                              f"(e.g. '*_mask.tif'). Intermediate wildcards do not work, found {label_grep}.")
         self.label_grep = label_grep
+        self.prefix = prefix
         self.train_label_data_root = train_label_data_root or label_data_root
         self.val_label_data_root = val_label_data_root or label_data_root
         self.test_label_data_root = test_label_data_root or label_data_root
@@ -560,6 +563,7 @@ class GenericMultiModalDataModule(NonGeoDataModule):
                 image_grep=self.image_grep,
                 label_grep=self.label_grep,
                 label_data_root=self.train_label_data_root,
+                prefix=self.prefix,
                 split=self.train_split,
                 allow_missing_modalities=self.allow_missing_modalities,
                 allow_substring_file_names=self.allow_substring_file_names,
@@ -586,6 +590,7 @@ class GenericMultiModalDataModule(NonGeoDataModule):
                 image_grep=self.image_grep,
                 label_grep=self.label_grep,
                 label_data_root=self.val_label_data_root,
+                prefix=self.prefix,
                 split=self.val_split,
                 allow_missing_modalities=self.allow_missing_modalities,
                 allow_substring_file_names=self.allow_substring_file_names,
@@ -612,6 +617,7 @@ class GenericMultiModalDataModule(NonGeoDataModule):
                 image_grep=self.image_grep,
                 label_grep=self.label_grep,
                 label_data_root=self.test_label_data_root,
+                prefix=self.prefix,
                 split=self.test_split,
                 allow_missing_modalities=self.allow_missing_modalities,
                 allow_substring_file_names=self.allow_substring_file_names,
@@ -638,6 +644,7 @@ class GenericMultiModalDataModule(NonGeoDataModule):
                 num_classes=self.num_classes,
                 image_grep=self.image_grep,
                 label_grep=self.label_grep,
+                prefix=self.prefix,
                 allow_missing_modalities=self.allow_missing_modalities,
                 allow_substring_file_names=self.allow_substring_file_names,
                 skip_file_checks=self.skip_file_checks,

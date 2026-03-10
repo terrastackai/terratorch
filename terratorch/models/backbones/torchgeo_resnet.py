@@ -619,6 +619,28 @@ def ssl4eos12_resnet50_sentinel2_all_moco(model_bands, pretrained = False, ckpt_
     return ResNetEncoderWrapper(model, resnet50_meta, weights, out_indices)
 
 @TERRATORCH_BACKBONE_REGISTRY.register
+def ssl4eos12_resnet50_sentinel2_all_softcon(model_bands, pretrained=False, ckpt_data: str | None = None,
+                                          weights: Weights | None = ResNet50_Weights.SENTINEL2_ALL_SOFTCON,
+                                          out_indices: list | None = None, **kwargs):
+    """
+    Args:
+        model_bands (list[str]): A list containing the names for the bands expected by the model.
+        pretrained (bool): The model is already pretrained (weights are available and can be restored) or not.
+        ckpt_data (str | None): Path for a checkpoint containing the model weights.
+    Returns:
+        ViTEncoderWrapper
+    """
+
+    if "in_chans" not in kwargs: kwargs["in_chans"] = len(model_bands)
+    model = resnet50(**kwargs)
+    if pretrained:
+        if weights is not None:
+            weights.meta['bands'] = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09', 'B10',
+                                     'B11', 'B12']
+        model = load_resnet_weights(model, model_bands, ckpt_data, weights)
+    return ResNetEncoderWrapper(model, resnet50_meta, weights, out_indices)
+
+@TERRATORCH_BACKBONE_REGISTRY.register
 def ssl4eos12_resnet50_sentinel2_rgb_moco(model_bands, pretrained = False, ckpt_data: str | None = None,  weights: Weights | None = ResNet50_Weights.SENTINEL2_RGB_MOCO, out_indices: list | None = None, **kwargs):
     """
     Args:

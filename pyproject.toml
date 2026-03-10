@@ -7,7 +7,7 @@ include = ["terratorch*"]
 
 [project]
 name = "terratorch"
-version = "v1.2.2"
+version = "v1.2.4"
 description = "TerraTorch - The geospatial foundation model fine-tuning toolkit"
 license = { "text" = "Apache License, Version 2.0" }
 readme = "README.md"
@@ -53,7 +53,7 @@ dependencies = [
   "lightly==1.5.22",
   "h5py",
   "lightning>=2.6.0",
-  "segmentation-models-pytorch", #==0.5.0",
+  "segmentation-models-pytorch>=0.5.0",
   "jsonargparse>=4.40.0",
   "torchgeo", #>=0.7.0,<0.7.2",
   "einops",
@@ -140,7 +140,8 @@ geobenchv2 = [
 ]
 
 vllm = [
-  "geobenchv2==0.9",
+  "geobenchv2>=0.9",
+  "impactmesh>0.1.0",
   "vllm>=0.12,!=0.15.*",
 ]
 

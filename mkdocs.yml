@@ -56,7 +56,7 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          paths: [src]  # search packages in the src folder
+          paths: [terratorch]  # search packages in the src folder
           options:
             show_root_heading: true
             heading_level: 3
@@ -104,11 +104,13 @@ nav:
     - Serving models with vLLM:
       - Introduction: guide/vllm/intro.md
       - vLLM IOProcessor Plugins:
-        - Getting Started: guide/vllm/vllm_io_plugins
+        - Getting Started: guide/vllm/vllm_io_plugins.md
         - Available Plugins:
           - Segmentation: guide/vllm/plugins/segmentation_io_plugin.md
+          - Terramind Segmentation: guide/vllm/plugins/tm_segmentation_io_plugin.md
       - Prepare your model for serving with vLLM: guide/vllm/prepare_your_model.md
-      - Initializing and serving a model with vLLM: guide/vllm/serving_a_model.md
+      - Initializing and serving a model with vLLM in tensor-to-tensor mode: guide/vllm/serving_a_model_tensor.md
+      - Initializing and serving a model with vLLM in image-to-image mode: guide/vllm/serving_a_model_image.md
     - FAQs: guide/faqs.md
 
   - Tutorials:

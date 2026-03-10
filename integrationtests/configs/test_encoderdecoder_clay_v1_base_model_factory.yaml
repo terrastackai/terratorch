@@ -14,7 +14,7 @@ trainer:
   logger:
     - class_path: lightning.pytorch.loggers.TensorBoardLogger
       init_args:
-        save_dir: /tmp/
+        save_dir: /dccstor/terratorch/tmp/clay_v1/
 
   callbacks:
     - class_path: lightning.pytorch.callbacks.LearningRateMonitor

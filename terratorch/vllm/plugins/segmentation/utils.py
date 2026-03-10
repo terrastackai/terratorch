@@ -33,9 +33,9 @@ def get_filename_from_url(url: str) -> str:
     return Path(parsed_url.path).name
 
 @contextmanager
-def path_or_tmpdir(prompt_dict: dict):
-    if prompt_dict["data_format"] == "path":
-        yield prompt_dict["data"]
+def path_or_tmpdir(prompt_dict):
+    if prompt_dict.data_format == "path":
+        yield prompt_dict.data
         return
     
     with TemporaryDirectory() as tmpdir:

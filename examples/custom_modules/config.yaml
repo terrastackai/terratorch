@@ -1,0 +1,35 @@
+trainer:
+  accelerator: auto
+  devices: 1
+  max_epochs: 2
+  log_every_n_steps: 5
+
+custom_modules_path: ./custom_modules
+
+model:
+  class_path: terratorch.tasks.regression_tasks.PixelwiseRegressionTask
+  init_args:
+    model_factory: EncoderDecoderFactory
+    model_args:
+      backbone: HelloGeoModule
+      backbone_input_channels: 3
+      backbone_output_channels: 64
+      backbone_kernel_size: 3
+      decoder: IdentityDecoder
+
+
+data:
+  class_path: terratorch.datamodules.dummy_datamodule.DummyDataModule
+  init_args:
+    batch_size: 4
+    num_workers: 2
+    train_samples: 20
+    val_samples: 10
+    test_samples: 10
+    height: 256
+    width: 256
+
+optimizer:
+  class_path: torch.optim.Adam
+  init_args:
+    lr: 0.001

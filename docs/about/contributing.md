@@ -16,12 +16,13 @@ a pipeline with hundreds of unit and integration tests to verify that the packag
 modification be merged to `main`. In this way, when an user wants to modify
 `terratorch` for adding new features or bufixes, this are the best practices. 
 
-* Clone the repository and guarantee the submodules were also intialized:
+## General steps
+
+* Clone the repository, if you were granted with direct writing access:
     ```
         git clone git@github.com:IBM/terratorch.git
-        git submodule init
-        git submodule update
     ```
+    otherwise, clone it from your personal fork.
 * This repository uses `pre-commit`, a tool which automatically runs basic
     steps before sending modifications to the remote (as linting, for example).
     See how to configure it [here](https://pre-commit.com/#installation). 
@@ -35,18 +36,38 @@ modification be merged to `main`. In this way, when an user wants to modify
     ```
     pytest -s -v tests/
     ```
-* To run the tests for all the versions:
-1. install `tox` (via `pip` or `uv`)
-2. Run `tox`:
-```
-tox run
-```
-3. For a specific version:
-```
-tox run run -e 3.13
-```
+## Testing using `tox`
 
-In case you don't have some Python versions installed, `tox` will skip them. 
+* If you want to run tests for more than one Python version, you can use `tox`:
+    1. install `tox` (via `pip` or `uv`)
+    2. Run `tox`:
+        ```
+        tox run
+        ```
+    3. For a specific version:
+        ```
+        tox run run -e 3.13
+        ```
+    4. In case you don't have some Python versions installed, `tox` will skip them. 
+
+## Testing with `podman` containers
+
+* Alternatively, it is possible to run the tests inside a container environment using `podman`. All the modifications done for the files inside the repository will be copied to the image and the tests will be updated. To do it, proceed in the following way:
+
+    1. Install `podman` in your system.
+    2. Building the base images:
+        ```
+        ./run_base_images_build.sh 
+        ```
+    3. Running the tests inside each environment:
+        ```
+        ./run_tests_container.sh 
+        ```
+    4. The images will remain in your system to be reused and will be rebuilt just
+       when some major change is done in the source code. 
+
+## Other recommended practices
+
 * If all the tests are passing, you can open a PR to `terratorch:main` describing what you are adding and why
     that is important to be merged. You
     do not need to choose a reviewer, since the maintainers will check the new open PR and request review for it by themselves.  
@@ -72,7 +93,7 @@ In case you don't have some Python versions installed, `tox` will skip them.
     git push -f origin <branch>
     ```
 !!! caution
-    The PR will not be merged if the automatic tests are failing and the user which has sent the PR is responsible for fixing it. 
+    Your PR will not be merged if the automatic tests are failing and the user which has sent the PR is responsible for fixing it. 
 
 ## Contributing with documentation
 

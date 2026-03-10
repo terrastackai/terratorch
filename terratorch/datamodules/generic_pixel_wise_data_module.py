@@ -216,13 +216,11 @@ class GenericNonGeoSegmentationDataModule(NonGeoDataModule):
 
         self.check_stackability = check_stackability
 
-        if tortilla_file is None and not all([
-            train_data_root, 
-            val_data_root, 
-            test_data_root
-            ]
-        ):
-            raise MisconfigurationException("Either provide tortilla_file OR all train/val/test roots.")
+        if tortilla_file is not None and any([train_data_root, val_data_root, test_data_root]):
+            raise MisconfigurationException(
+                "Cannot provide both tortilla_file and train_data_root/val_data_root/test_data_root. "
+                "Use tortilla_file OR data roots (not both)."
+            )
 
         self.tortilla_df = tacoreader.load(str(tortilla_file)) if tortilla_file is not None else None
 

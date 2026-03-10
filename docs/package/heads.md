@@ -8,4 +8,4 @@
 
 :::terratorch.models.heads.segmentation_head.SegmentationHead
 
-:::terratorch.models.heads.classification_head.ClassificationHead
+::: terratorch.models.heads.ClassificationHead
