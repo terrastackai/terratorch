@@ -506,12 +506,19 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
         Returns:
             a matplotlib Figure with the rendered sample
         """
-        suptitle = suptitle or sample.get("filename", "").split("/")[-1].split(".")[0]
+        if suptitle is None:
+            # Infer suitable subtitle from filename
+            filename = sample.get("filename", "")
+            if isinstance(filename, str):
+                suptitle = filename.split("/")[-1].split(".")[0]
+            elif isinstance(filename, dict):
+                # Can be dict if user plots dataset samples
+                suptitle = list(filename.values())[0].split("/")[-1].split(".")[0]
         images = {}
         for mod, indices in self.rgb_indices.items():
             if "image" in sample and isinstance(sample["image"], dict) and mod in sample["image"]:
                 # Move modality to sample dict
-                images[mod] = sample["image"][mod]
+                sample[mod] = sample["image"][mod]
             if mod in sample.keys():
                 image = sample[mod][indices]
                 # Per modality processing
