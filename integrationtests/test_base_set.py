@@ -39,45 +39,84 @@ def free_gpu():
         print("GPU reset failed:", e)
 
 
+MODEL_CONFIG_MAP = {
+    "eo_v1_100": "test_encoderdecoder_eo_v1_100_model_factory.yaml",
+    "eo_v2_300": "test_encoderdecoder_eo_v2_300_model_factory.yaml",
+    "eo_v2_600": "test_encoderdecoder_eo_v2_600_model_factory.yaml",
+    "swinb": "test_prithvi_swinB_model_factory_config.yaml",
+    "swinl": "test_prithvi_swinL_model_factory_config.yaml",
+    "smp_resnet34": "test_smp_resnet34_model_factory_config.yaml",
+    "timm_resnet34": "test_encoderdecoder_timm_resnet34_model_factory.yaml",
+    "timm_resnet18": "test_encoder_decoder_timm_resnet18_model_factory.yaml",
+    "timm_resnet50": "test_encoder_decoder_timm_resnet50_model_factory.yaml",
+    "timm_resnet101": "test_encoder_decoder_timm_resnet101_model_factory.yaml",
+    "timm_resnet152": "test_encoder_decoder_timm_resnet152_model_factory.yaml",
+    "clay_v1": "test_encoderdecoder_clay_v1_base_model_factory.yaml",
+    "timm_convnext_large": "test_encoderdecoder_timm_convnext_large-fb-in22k_model_factory.yaml",
+    "timm_convnext_xlarge": "test_encoderdecoder_timm_convnext_xlarge-fb-in22k_model_factory.yaml",
+    "terramind_large": "test_terramind_large.yaml",
+    "terramind_base": "test_terramind_base.yaml",
+}
+
+
 @pytest.mark.parametrize(
     "model_name",
     [
-        "encoderdecoder_eo_v1_100_model_factory",
-        "encoderdecoder_eo_v2_300_model_factory",
-        "encoderdecoder_eo_v2_600_model_factory",
-        "prithvi_swinB_model_factory_config",
-        "prithvi_swinL_model_factory_config",
-        "smp_resnet34_model_factory_config",
-        "encoderdecoder_timm_resnet34_model_factory",
-        "encoder_decoder_timm_resnet18_model_factory",
-        "encoder_decoder_timm_resnet50_model_factory",
-        "encoder_decoder_timm_resnet101_model_factory",
-        "encoder_decoder_timm_resnet152_model_factory",
-        "encoderdecoder_clay_v1_base_model_factory",
-        "encoderdecoder_timm_convnext_large-fb-in22k_model_factory",
-        "encoderdecoder_timm_convnext_xlarge-fb-in22k_model_factory",
+        "eo_v1_100",
+        "eo_v2_300",
+        "eo_v2_600",
+        "swinb",
+        "swinl",
+        "smp_resnet34",
+        "timm_resnet34",
+        "timm_resnet18",
+        "timm_resnet50",
+        "timm_resnet101",
+        "timm_resnet152",
+        "clay_v1",
+        "timm_convnext_large",
+        "timm_convnext_xlarge",
         "terramind_base",
         "terramind_large",
     ],
 )
 def test_models_fit(model_name):
-    result = subprocess.run(
-        ["terratorch", "fit", "-c", f"./integrationtests/configs/test_{model_name}.yaml"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    torch.cuda.empty_cache()
-    free_gpu()
+    import tempfile
+    import yaml
 
-    # Print the captured output
-    print("STDOUT:", result.stdout)
-    print("STDERR:", result.stderr)
+    # Read the original config file
+    config_path = f"./integrationtests/configs/{MODEL_CONFIG_MAP[model_name]}"
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
 
-    # Check the return code
-    assert result.returncode == 0, (
-        f"Test failed with return code {result.returncode}STDOUT: {result.stdout}STDERR: {result.stderr}"
-    )
+    # Replace /dccstor/terratorch/tmp with TMP_ROOT in the config
+    config_str = yaml.dump(config)
+    config_str = config_str.replace("/dccstor/terratorch/tmp", TMP_ROOT)
+    config = yaml.safe_load(config_str)
+
+    # Write the modified config to a temporary file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as tmp_config:
+        yaml.dump(config, tmp_config)
+        tmp_config.flush()  # Ensure content is written to disk
+        tmp_config_path = tmp_config.name
+
+        result = subprocess.run(
+            ["terratorch", "fit", "-c", tmp_config_path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        torch.cuda.empty_cache()
+        free_gpu()
+
+        # Print the captured output
+        print("STDOUT:", result.stdout)
+        print("STDERR:", result.stderr)
+
+        # Check the return code
+        assert result.returncode == 0, (
+            f"Test failed with return code {result.returncode}STDOUT: {result.stdout}STDERR: {result.stderr}"
+        )
 
     gc.collect()
 

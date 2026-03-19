@@ -76,17 +76,17 @@ try:
 except ImportError:
     pass
 
-__all__ = (
+__all__ = [
     "GenericNonGeoSegmentationDataModule",
     "GenericNonGeoPixelwiseRegressionDataModule",
-    "GenericNonGeoSegmentationDataModule",
     "GenericNonGeoClassificationDataModule",
     # "GenericNonGeoRegressionDataModule",
     "BurnIntensityNonGeoDataModule",
     "CarbonFluxNonGeoDataModule",
     "Landslide4SenseNonGeoDataModule",
     "ForestNetNonGeoDataModule",
-    "BioMasstersNonGeoDataModuleSen1Floods11NonGeoDataModule",
+    "BioMasstersNonGeoDataModule",
+    "Sen1Floods11NonGeoDataModule",
     "Sen4MapLucasDataModule",
     "FireScarsNonGeoDataModule",
     "MultiTemporalCropClassificationDataModule",
@@ -104,24 +104,25 @@ __all__ = (
     "MPv4gerSegNonGeoDataModule",
     "MSACropTypeNonGeoDataModule",
     "MNeonTreeNonGeoDataModule",
-    "OpenEarthMapModuleOpenSentinelMapDataModule",
+    "OpenEarthMapNonGeoDataModule",
+    "OpenSentinelMapDataModule",
     "PASTISDataModule",
     "Sen4AgriNetDataModule",
     "GenericMultiModalDataModule",
     "mVHR10DataModule",
     "SubstationDataModule",
     "HelioNetCDFDataModule",
-)
+]
 
 if wxc_present:
-    __all__.__add__(("Merra2DownscaleNonGeoDataModule",))
+    __all__.append("Merra2DownscaleNonGeoDataModule")
 
 
 if geobench_v2_present:
-    __all__.__add__(
-        (
+    __all__.extend(
+        [
             "GeoBenchV2SegmentationDataModule",
             "GeoBenchV2ObjectDetectionDataModule",
             "GeoBenchV2ClassificationDataModule",
-        )
+        ]
     )
