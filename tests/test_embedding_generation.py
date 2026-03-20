@@ -209,10 +209,10 @@ def test_infer_bt_tensor_and_dict(mock_backbone_registry):
     task = EmbeddingGenerationTask(model_args={"backbone": "dummy"})
 
     x = torch.randn(2, 3, 224, 224)
-    assert task.infer_BT(x) == (2, 1)
+    assert task.infer_bt(x) == (2, 1)
 
     x_dict = {"optical": torch.randn(2, 3, 4, 224, 224)}
-    assert task.infer_BT(x_dict) == (2, 4)
+    assert task.infer_bt(x_dict) == (2, 4)
 
 
 def test_check_file_ids_valid_and_errors(mock_backbone_registry):
