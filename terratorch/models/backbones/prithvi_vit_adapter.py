@@ -46,6 +46,7 @@ try:
             coords_scale_learn (bool): Whether to learn the scale of the coordinates.
             drop_path (float): Drop path rate.
         """
+
         extra_layers = ("level_embed", "spm", "interactions", "up", "norm1", "norm2", "norm3", "norm4")
 
         def __init__(
@@ -269,11 +270,10 @@ except ImportError as err:
     # We define a dummy class to avoid breaking the code.
     class PrithviViTAdapter(nn.Module):
         err: ImportError = err
+
         def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
             msg = (
                 "While defining PrithviViTAdapter, the following error occurred:\n"
                 f"{self.err}.\nPlease install the optional dependencies to use this feature."
             )
-            raise ImportError(
-                msg
-            )
+            raise ImportError(msg)

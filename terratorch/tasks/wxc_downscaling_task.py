@@ -1,16 +1,17 @@
+from collections.abc import Mapping
+from typing import Any
+
 import torch
+from granitewxc.utils.config import ExperimentConfig
 from torch import Tensor, nn
 from torchgeo.trainers import BaseTask
-from typing import Any, Mapping
+from torchmetrics import MeanAbsoluteError, MeanSquaredError, MetricCollection
 
-from terratorch.models.model import Model#, get_factory
+from terratorch.models.model import Model  # , get_factory
 from terratorch.registry import MODEL_FACTORY_REGISTRY
 from terratorch.tasks.loss_handler import LossHandler
 from terratorch.tasks.optimizer_factory import optimizer_factory
 from terratorch.tasks.regression_tasks import RootLossWrapper
-from granitewxc.utils.config import ExperimentConfig
-from torchmetrics import MetricCollection
-from torchmetrics import MeanAbsoluteError, MeanSquaredError, MetricCollection
 
 
 class WxCDownscalingTask(BaseTask):
@@ -51,28 +52,28 @@ class WxCDownscalingTask(BaseTask):
         input_size_lon = extra_kwargs.pop("input_size_lon")
         freeze_backbone = extra_kwargs.pop("freeze_backbone")
         freeze_decoder = extra_kwargs.pop("freeze_decoder")
-        data_path_surface = extra_kwargs.pop("data_path_surface") 
-        data_path_vertical = extra_kwargs.pop("data_path_vertical") 
-        climatology_path_surface = extra_kwargs.pop("climatology_path_surface") 
-        climatology_path_vertical = extra_kwargs.pop("climatology_path_vertical") 
+        data_path_surface = extra_kwargs.pop("data_path_surface")
+        data_path_vertical = extra_kwargs.pop("data_path_vertical")
+        climatology_path_surface = extra_kwargs.pop("climatology_path_surface")
+        climatology_path_vertical = extra_kwargs.pop("climatology_path_vertical")
         residual_connection = model_args.pop("residual_connection")
         residual = extra_kwargs.pop("residual", True)
 
         # Special cases for required variables
         input_scalers_surface_path = extra_kwargs.pop("input_scalers_surface_path", None)
         if not input_scalers_surface_path:
-            raise Exception(f"The parameter `input_scalers_surface_path` must be defined in `extra_kwargs`.")
+            raise Exception("The parameter `input_scalers_surface_path` must be defined in `extra_kwargs`.")
 
         input_scalers_vertical_path = extra_kwargs.pop("input_scalers_vertical_path", None)
         if not input_scalers_vertical_path:
-            raise Exception(f"The parameter `input_scalers_vertical_path` must be defined in `extra_kwargs`.")
-        
+            raise Exception("The parameter `input_scalers_vertical_path` must be defined in `extra_kwargs`.")
+
         output_scalers_surface_path = extra_kwargs.pop("output_scalers_surface_path")
         output_scalers_vertical_path = extra_kwargs.pop("output_scalers_vertical_path")
 
         model_config.freeze_backbone = freeze_backbone
         model_config.freeze_decoder = freeze_decoder
-        model_config.mask_unit_size = mask_unit_size  
+        model_config.mask_unit_size = mask_unit_size
         model_config.model.mask_unit_size = mask_unit_size
         model_config.model.encoder_decoder_kernel_size_per_stage = encoder_decoder_kernel_size_per_stage
         model_config.model.input_scalers_surface_path = input_scalers_surface_path
@@ -82,7 +83,7 @@ class WxCDownscalingTask(BaseTask):
         model_config.data.input_surface_vars = model_config.data.surface_vars
         model_config.data.input_vertical_vars = model_config.data.vertical_vars
         model_config.data.input_static_surface_vars = model_config.data.static_surface_vars
-        model_config.data.input_levels = input_levels 
+        model_config.data.input_levels = input_levels
         model_config.model.downscaling_patch_size = downscaling_patch_size
         model_config.data.n_input_timestamps = n_input_timestamps
         model_config.model.downscaling_embed_dim = downscaling_embed_dim
@@ -90,7 +91,7 @@ class WxCDownscalingTask(BaseTask):
         model_config.model.encoder_decoder_scale_per_stage = encoder_decoder_scale_per_stage
         model_config.model.encoder_decoder_upsampling_mode = encoder_decoder_upsampling_mode
         model_config.model.encoder_shift = encoder_shift
-        model_config.model.drop_path = drop_path 
+        model_config.model.drop_path = drop_path
         model_config.model.encoder_decoder_type = encoder_decoder_type
         model_config.data.input_size_lat = input_size_lat
         model_config.data.input_size_lon = input_size_lon
@@ -147,7 +148,7 @@ class WxCDownscalingTask(BaseTask):
         Raises:
             ValueError: If *loss* is invalid.
         """
-        #TODO 'reduction' should be chosen using the config and
+        # TODO 'reduction' should be chosen using the config and
         # a similar class as IgnoreIndex should be defined for this class
 
         loss: str = self.hparams["loss"].lower()

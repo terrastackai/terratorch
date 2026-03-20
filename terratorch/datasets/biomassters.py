@@ -15,12 +15,12 @@ import rasterio
 import torch
 from matplotlib.figure import Figure
 from torch import Tensor
+from torchgeo.datasets import BioMassters
+from torchgeo.datasets.utils import percentile_normalization
 
 from terratorch.datasets.generic_multimodal_dataset import MultimodalToTensor
 from terratorch.datasets.transforms import MultimodalTransforms
 from terratorch.datasets.utils import default_transform
-from torchgeo.datasets import BioMassters
-from torchgeo.datasets.utils import percentile_normalization
 
 
 class BioMasstersNonGeo(BioMassters):
@@ -88,7 +88,7 @@ class BioMasstersNonGeo(BioMassters):
 
     def __init__(
         self,
-        root = "data",
+        root="data",
         split: str = "train",
         bands: dict[str, Sequence[str]] | Sequence[str] = BAND_SETS["all"],
         transform: A.Compose | None = None,
@@ -102,7 +102,7 @@ class BioMasstersNonGeo(BioMassters):
         include_corrupt: bool = True,
         subset: float = 1,
         seed: int = 42,
-        use_four_frames: bool = False
+        use_four_frames: bool = False,
     ) -> None:
         """Initialize a new instance of BioMassters dataset.
 
@@ -128,24 +128,19 @@ class BioMasstersNonGeo(BioMassters):
         self.root = root
         self.sensors = sensors
         self.bands = bands
-        assert (
-            split in self.valid_splits
-        ), f"Please choose one of the valid splits: {self.valid_splits}."
+        assert split in self.valid_splits, f"Please choose one of the valid splits: {self.valid_splits}."
         self.split = split
 
-        assert set(sensors).issubset(
-            set(self.valid_sensors)
-        ), f"Please choose a subset of valid sensors: {self.valid_sensors}."
+        assert set(sensors).issubset(set(self.valid_sensors)), (
+            f"Please choose a subset of valid sensors: {self.valid_sensors}."
+        )
 
         if len(self.sensors) == 1:
             sens = self.sensors[0]
-            self.band_indices = [
-                self.all_band_names[sens].index(band) for band in self.bands[sens]
-            ]
+            self.band_indices = [self.all_band_names[sens].index(band) for band in self.bands[sens]]
         else:
             self.band_indices = {
-                sens: [self.all_band_names[sens].index(band) for band in self.bands[sens]]
-                for sens in self.sensors
+                sens: [self.all_band_names[sens].index(band) for band in self.bands[sens]] for sens in self.sensors
             }
 
         self.mask_mean = mask_mean
@@ -179,22 +174,15 @@ class BioMasstersNonGeo(BioMassters):
         # generate numerical month from filename since first month is September
         # and has numerical index of 0
         self.df["num_month"] = (
-            self.df["filename"]
-            .str.split("_", expand=True)[2]
-            .str.split(".", expand=True)[0]
-            .astype(int)
+            self.df["filename"].str.split("_", expand=True)[2].str.split(".", expand=True)[0].astype(int)
         )
 
         # Set dataframe index depending on the task for easier indexing
         if self.as_time_series:
             self.df["num_index"] = self.df.groupby(["chip_id"]).ngroup()
         else:
-            filter_df = (
-                self.df.groupby(["chip_id", "month"])["satellite"].count().reset_index()
-            )
-            filter_df = filter_df[
-                filter_df["satellite"] == len(self.sensors)
-            ].drop("satellite", axis=1)
+            filter_df = self.df.groupby(["chip_id", "month"])["satellite"].count().reset_index()
+            filter_df = filter_df[filter_df["satellite"] == len(self.sensors)].drop("satellite", axis=1)
             # Guarantee that each sample has corresponding number of images available
             self.df = self.df.merge(filter_df, on=["chip_id", "month"], how="inner")
 
@@ -206,10 +194,7 @@ class BioMasstersNonGeo(BioMassters):
         elif transform is None:
             self.transform = MultimodalToTensor(self.sensors)
         else:
-            transform = {
-                s: transform[s] if s in transform else default_transform
-                for s in self.sensors
-            }
+            transform = {s: transform[s] if s in transform else default_transform for s in self.sensors}
             self.transform = MultimodalTransforms(transform, shared=False)
 
         if self.use_four_frames:
@@ -227,13 +212,11 @@ class BioMasstersNonGeo(BioMassters):
         Returns:
             input image
         """
-        filepaths = [
-            os.path.join(self.root, f"{self.split}_features", f) for f in filenames
-        ]
+        filepaths = [os.path.join(self.root, f"{self.split}_features", f) for f in filenames]
         arr_list = [rasterio.open(fp).read() for fp in filepaths]
 
         if self.as_time_series:
-            arr = np.stack(arr_list, axis=0) # (T, C, H, W)
+            arr = np.stack(arr_list, axis=0)  # (T, C, H, W)
         else:
             arr = np.concatenate(arr_list, axis=0)
         return arr.astype(np.int32)
@@ -302,7 +285,7 @@ class BioMasstersNonGeo(BioMassters):
                 VV_desc = linear[2]
                 VH_desc = linear[3]
                 rvi_desc = 4 * VH_desc / (VV_desc + VH_desc + 1e-6)
-                rvi_desc = np.expand_dims(rvi_desc, axis=0) 
+                rvi_desc = np.expand_dims(rvi_desc, axis=0)
                 rvi_channels.append(rvi_desc)
             if rvi_channels:
                 rvi_concat = np.concatenate(rvi_channels, axis=0)
@@ -343,9 +326,7 @@ class BioMasstersNonGeo(BioMassters):
     def __getitem__(self, index: int) -> dict:
         sample_df = self.df[self.df["num_index"] == index].copy()
         # Sort by satellite and month
-        sample_df.sort_values(
-            by=["satellite", "num_month"], inplace=True, ascending=True
-        )
+        sample_df.sort_values(by=["satellite", "num_month"], inplace=True, ascending=True)
 
         filepaths = sample_df["filename"].tolist()
         output = {}
@@ -375,10 +356,7 @@ class BioMasstersNonGeo(BioMassters):
         return output
 
     def _filter_and_select_data(self):
-        if (
-            self.max_cloud_percentage is not None
-            and "cloud_percentage" in self.df.columns
-        ):
+        if self.max_cloud_percentage is not None and "cloud_percentage" in self.df.columns:
             self.df = self.df[self.df["cloud_percentage"] <= self.max_cloud_percentage]
 
         if self.max_red_mean is not None and "red_mean" in self.df.columns:
@@ -389,7 +367,6 @@ class BioMasstersNonGeo(BioMassters):
 
     def _random_subsample(self):
         if self.split == "train" and self.subset < 1.0:
-            
             if self.seed is not None:
                 random.seed(self.seed)
 
@@ -458,9 +435,7 @@ class BioMasstersNonGeo(BioMassters):
                     cross_polarization = np.clip(cross_polarization / 0.05, 0, 1)
                     ratio = np.clip(ratio / 25, 0, 1)
 
-                    img = np.stack(
-                        (co_polarization, cross_polarization, ratio), axis=0
-                    )
+                    img = np.stack((co_polarization, cross_polarization, ratio), axis=0)
                     img = img.transpose(1, 2, 0)  # Convert to (H, W, 3)
 
                 axs[idx].imshow(img)
@@ -487,9 +462,7 @@ class BioMasstersNonGeo(BioMassters):
                 cross_polarization = np.clip(cross_polarization / 0.05, 0, 1)
                 ratio = np.clip(ratio / 25, 0, 1)
 
-                img = np.stack(
-                    (co_polarization, cross_polarization, ratio), axis=0
-                )
+                img = np.stack((co_polarization, cross_polarization, ratio), axis=0)
                 img = img.transpose(1, 2, 0)  # Convert to (H, W, 3)
 
             axs[0].imshow(img)

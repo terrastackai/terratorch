@@ -4,30 +4,30 @@
 
 import glob
 import logging
-import random
-import warnings
 import os
+import random
 import re
-import torch
-import rasterio
-import pandas as pd
+import warnings
 from abc import ABC
 from pathlib import Path
 from typing import Any
 
 import albumentations as A
 import numpy as np
+import pandas as pd
+import rasterio
 import rioxarray
+import torch
 import xarray as xr
 from einops import rearrange
 from matplotlib import pyplot as plt
+from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
-from matplotlib.colors import ListedColormap
 from torchgeo.datasets import NonGeoDataset
 
+from terratorch.datasets.transforms import MultimodalToTensor, MultimodalTransforms
 from terratorch.datasets.utils import default_transform, generate_bands_intervals
-from terratorch.datasets.transforms import MultimodalTransforms, MultimodalToTensor
 
 logger = logging.getLogger("terratorch")
 
@@ -168,9 +168,9 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
             f"concat_bands can only be used with image modalities, "
             f"but non-image modalities are given: {self.non_image_modalities}"
         )
-        assert (
-            not self.concat_bands or not allow_missing_modalities
-        ), "concat_bands cannot be used with allow_missing_modalities."
+        assert not self.concat_bands or not allow_missing_modalities, (
+            "concat_bands cannot be used with allow_missing_modalities."
+        )
 
         if self.expand_temporal_dimension:
             if not self.temporal_channel_major:
@@ -179,12 +179,11 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
                     "(all bands of one timestep are stacked together). "
                     "If instead bands are grouped by channel "
                     "(all timesteps of one band are stacked together), "
-                    "set temporal_channel_major=True.")
+                    "set temporal_channel_major=True."
+                )
 
             if dataset_bands is None:
-                raise ValueError(
-                    "Please provide dataset_bands when expand_temporal_dimension=True."
-                )
+                raise ValueError("Please provide dataset_bands when expand_temporal_dimension=True.")
 
         if scalar_label:
             self.non_image_modalities += ["label"]
@@ -216,8 +215,7 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
 
                 # Prepend prefix, make sure v is not an absolute path
                 valid_files = [
-                    (os.path.join(prefix, v.lstrip("/\\")) if v and not os.path.isabs(v) else v)
-                    for v in valid_files
+                    (os.path.join(prefix, v.lstrip("/\\")) if v and not os.path.isabs(v) else v) for v in valid_files
                 ]
 
         else:
@@ -229,14 +227,14 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
 
             def get_file_id(file_name, mod):
                 base = os.path.basename(file_name)
-                glob_as_regex = '^(.*?)' + ''.join(re.escape(ch) for ch in image_grep[mod].strip('*')) + '$'
+                glob_as_regex = "^(.*?)" + "".join(re.escape(ch) for ch in image_grep[mod].strip("*")) + "$"
                 stem = re.match(glob_as_regex, base).group(1)
 
                 if "." not in image_grep[mod] and allow_substring_file_names:
                     stem = os.path.splitext(stem)[0]
 
                 if "/" in self.prefix:
-                    parent = os.path.basename(os.path.dirname(file_name)) # direct parent dir
+                    parent = os.path.basename(os.path.dirname(file_name))  # direct parent dir
 
                     # warn if we have more than one subdirectory level
                     if self.prefix.count("/") > 1:
@@ -250,10 +248,9 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
                 return stem
 
             if allow_missing_modalities:
-                valid_files = list(set([get_file_id(file, mod)
-                                        for mod, files in image_files.items()
-                                        for file in files
-                                        ]))
+                valid_files = list(
+                    set([get_file_id(file, mod) for mod, files in image_files.items() for file in files])
+                )
             else:
                 valid_files = [get_file_id(file, self.modalities[0]) for file in image_files[self.modalities[0]]]
 
@@ -262,12 +259,14 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
         if len(valid_files) == 0:
             # Provide additional information if no candidates are found
             image_files = {m: f[:3] for m, f in image_files.items()}
-            raise ValueError(f"No sample candidates (file prefixes) found for multimodal dataset. "
-                             f"Please review files and parameters.\n"
-                             f"data_root: {data_root}\n"
-                             f"image_grep: {image_grep}\n"
-                             f"allow_missing_modalities: {allow_missing_modalities}\n"
-                             f"File examples in data_root: {image_files}\n")
+            raise ValueError(
+                f"No sample candidates (file prefixes) found for multimodal dataset. "
+                f"Please review files and parameters.\n"
+                f"data_root: {data_root}\n"
+                f"image_grep: {image_grep}\n"
+                f"allow_missing_modalities: {allow_missing_modalities}\n"
+                f"File examples in data_root: {image_files}\n"
+            )
 
         # Check for parquet and csv files with modality data and read the file
         for m, m_path in data_root.items():
@@ -275,15 +274,19 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
                 data_root[m] = load_table_data(m_path)
                 # Check for some sample keys
                 if not any(f in data_root[m].index for f in valid_files[:100]):
-                    warnings.warn(f"Sample key expected in table index (first column) for {m} (file: {m_path}). "
-                                  f"{valid_files[:3]+['...']} are not in index {list(data_root[m].index[:3])+['...']}.")
+                    warnings.warn(
+                        f"Sample key expected in table index (first column) for {m} (file: {m_path}). "
+                        f"{valid_files[:3] + ['...']} are not in index {list(data_root[m].index[:3]) + ['...']}."
+                    )
         if label_data_root is not None:
             if os.path.isfile(label_data_root):
                 label_data_root = load_table_data(label_data_root)
                 # Check for some sample keys
                 if not any(f in label_data_root.index for f in valid_files[:100]):
-                    warnings.warn(f"Keys expected in table index (first column) for labels (file: {label_data_root}). "
-                                  f"The keys {valid_files[:3] + ['...']} are not in the index.")
+                    warnings.warn(
+                        f"Keys expected in table index (first column) for labels (file: {label_data_root}). "
+                        f"The keys {valid_files[:3] + ['...']} are not in the index."
+                    )
 
         # Iterate over all files in split
         failed_candidates = []
@@ -296,25 +299,29 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
                     sample[m] = m_path.loc[file].values
                 elif allow_substring_file_names:
                     # Substring match with image_grep
-                    if os.path.exists(os.path.join(m_path, file + image_grep[m].strip('*'))):
+                    if os.path.exists(os.path.join(m_path, file + image_grep[m].strip("*"))):
                         # Avoid glob if possible to speed up the dataset build
-                        m_files = [os.path.join(m_path, file + image_grep[m].strip('*'))]
+                        m_files = [os.path.join(m_path, file + image_grep[m].strip("*"))]
                     else:
                         m_files = sorted(glob.glob(os.path.join(m_path, file + image_grep[m])))
                         if len(valid_files) > 10_000:
-                            warnings.warn("Found large data folder. You can speed up the dataset build by "
-                                          "providing split files with sample ids and suffixes without wildcards. E.g. "
-                                          "sample id 'sample1' and suffix '_s2l2a.tif' for file 'sample1_s2l2a.tif'.")
+                            warnings.warn(
+                                "Found large data folder. You can speed up the dataset build by "
+                                "providing split files with sample ids and suffixes without wildcards. E.g. "
+                                "sample id 'sample1' and suffix '_s2l2a.tif' for file 'sample1_s2l2a.tif'."
+                            )
 
                     if m_files:
                         sample[m] = m_files[-1]
                         if len(m_files) > 1:
-                            warnings.warn(f"Found multiple matching files for sample {file} and grep {image_grep[m]}: "
-                                          f"{m_files}. Selecting last one. "
-                                          f"Consider changing data structure or parameters for unique selection.")
+                            warnings.warn(
+                                f"Found multiple matching files for sample {file} and grep {image_grep[m]}: "
+                                f"{m_files}. Selecting last one. "
+                                f"Consider changing data structure or parameters for unique selection."
+                            )
                 else:
                     # Exact match
-                    file_path = os.path.join(m_path, file + image_grep[m].strip('*'))
+                    file_path = os.path.join(m_path, file + image_grep[m].strip("*"))
                     if skip_file_checks or os.path.exists(file_path):
                         sample[m] = file_path
 
@@ -323,9 +330,9 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
                     # Add tabular data to sample
                     sample["mask"] = label_data_root.loc[file].values
                 elif allow_substring_file_names:
-                    if os.path.exists(os.path.join(label_data_root, file + label_grep.strip('*'))):
+                    if os.path.exists(os.path.join(label_data_root, file + label_grep.strip("*"))):
                         # Avoid glob if possible to speed up the dataset build
-                        l_files = [os.path.join(label_data_root, file + label_grep.strip('*'))]
+                        l_files = [os.path.join(label_data_root, file + label_grep.strip("*"))]
                     else:
                         # Substring match with label_grep
                         l_files = sorted(glob.glob(os.path.join(label_data_root, file + label_grep)))
@@ -333,7 +340,7 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
                         sample["mask"] = l_files[-1]
                 else:
                     # Exact match
-                    file_path = os.path.join(label_data_root, file + label_grep.strip('*'))
+                    file_path = os.path.join(label_data_root, file + label_grep.strip("*"))
                     if skip_file_checks or os.path.exists(file_path):
                         sample["mask"] = file_path
                 if "mask" not in sample:
@@ -349,13 +356,15 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
         if len(self.samples) == 0:
             # Provide additional information if no multi-modal samples are found
             idx = random.sample(range(len(valid_files)), min(5, len(valid_files)))
-            raise ValueError(f"No samples found for multimodal dataset. Please review files, path, and grep params.\n"
-                             f"data_root: {data_root}\n"
-                             f"image_grep: {image_grep}\n"
-                             f"allow_substring_file_names: {allow_substring_file_names}\n"
-                             f"allow_missing_modalities: {allow_missing_modalities}\n"
-                             f"Candidate prefixes: {', '.join([valid_files[i] for i in idx])}\n"
-                             f"Sample candidate paths: {', '.join([str(failed_candidates[i]) for i in idx])}")
+            raise ValueError(
+                f"No samples found for multimodal dataset. Please review files, path, and grep params.\n"
+                f"data_root: {data_root}\n"
+                f"image_grep: {image_grep}\n"
+                f"allow_substring_file_names: {allow_substring_file_names}\n"
+                f"allow_missing_modalities: {allow_missing_modalities}\n"
+                f"Candidate prefixes: {', '.join([valid_files[i] for i in idx])}\n"
+                f"Sample candidate paths: {', '.join([str(failed_candidates[i]) for i in idx])}"
+            )
 
         self.rgb_indices = rgb_indices or {image_modalities[0]: [0, 1, 2]}
 
@@ -368,7 +377,7 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
             for modality in self.modalities:
                 if modality in self.output_bands and modality not in self.dataset_bands:
                     msg = f"If output bands are provided, dataset_bands must also be provided (modality: {modality})"
-                    raise Exception(msg)  # noqa: PLE0101
+                    raise Exception(msg)
         else:
             self.output_bands = {}
 
@@ -391,9 +400,12 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
 
         # If no transform is given, apply only to transform to torch tensor
         if isinstance(transform, A.Compose):
-            self.transform = MultimodalTransforms(transform,
-                                                  non_image_modalities=self.non_image_modalities + ['label']
-                                                  if scalar_label else self.non_image_modalities)
+            self.transform = MultimodalTransforms(
+                transform,
+                non_image_modalities=self.non_image_modalities + ["label"]
+                if scalar_label
+                else self.non_image_modalities,
+            )
         elif isinstance(transform, dict):
             # Modality-specific transforms
             transform = {m: transform[m] if m in transform else default_transform for m in self.modalities}
@@ -401,7 +413,7 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
         elif transform is None:
             self.transform = MultimodalToTensor(self.modalities)
         else:
-            raise ValueError(f'Unknown transform type: {type(transform)}, expect A.Compose, dict or None.')
+            raise ValueError(f"Unknown transform type: {type(transform)}, expect A.Compose, dict or None.")
 
         # Ignore rasterio warning for not geo-referenced files
         warnings.filterwarnings("ignore", category=rasterio.errors.NotGeoreferencedWarning)
@@ -437,7 +449,6 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
                     data = rearrange(
                         data, "(time channels) h w -> channels time h w", channels=len(self.dataset_bands[modality])
                     )
-
 
             if modality == "mask" and not self.scalar_label:
                 # tasks expect image masks without channel dim
@@ -531,13 +542,15 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
                 # Channel last
                 image = np.moveaxis(image, 0, -1)
                 if image.ndim == 4:
-                    warnings.warn(f"Found time series data. Plotting only supports images, selecting the first one.")
+                    warnings.warn("Found time series data. Plotting only supports images, selecting the first one.")
                     image = image[0]
                 images[mod] = image
 
         if len(images) == 0:
-            warnings.warn(f"No RGB modalities found ({suptitle}). Sample keys: {list(sample.keys())}, "
-                          f"Dataset rgb_indices modalities: {list(self.rgb_indices.keys())}")
+            warnings.warn(
+                f"No RGB modalities found ({suptitle}). Sample keys: {list(sample.keys())}, "
+                f"Dataset rgb_indices modalities: {list(self.rgb_indices.keys())}"
+            )
             raise ValueError("No RGB images found.")
 
         if "mask" in sample:
@@ -574,8 +587,7 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
             cmap = plt.get_cmap("rainbow")
             cmap = ListedColormap(cmap(np.linspace(0.10, 1.0, self.num_classes)))  # Start with blue
             class_names = self.class_names or list(range(0, self.num_classes))
-            handles = [Rectangle((0, 0), 1, 1, color=cmap(i))
-                       for i in range(self.num_classes)]
+            handles = [Rectangle((0, 0), 1, 1, color=cmap(i)) for i in range(self.num_classes)]
 
             if self.no_label_replace is not None:
                 if mask is not None:
@@ -589,18 +601,26 @@ class GenericMultimodalDataset(NonGeoDataset, ABC):
                 handles = [Rectangle((0, 0), 1, 1, color=(0, 0, 0, 1))] + handles
         else:
             # Regression
-            vmax = np.max([mask.max() if mask is not None else 0,
-                           prediction.max() if prediction is not None else 0,
-                           label.max() if label is not None else 0])
-            vmin = np.min([mask.min() if mask is not None else 0,
-                           prediction.min() if prediction is not None else 0,
-                           label.min() if label is not None else 0])
+            vmax = np.max(
+                [
+                    mask.max() if mask is not None else 0,
+                    prediction.max() if prediction is not None else 0,
+                    label.max() if label is not None else 0,
+                ]
+            )
+            vmin = np.min(
+                [
+                    mask.min() if mask is not None else 0,
+                    prediction.min() if prediction is not None else 0,
+                    label.min() if label is not None else 0,
+                ]
+            )
             cmap = "viridis"
             class_names = handles = None
 
         # Plot images
         num_images = len(images) + int(mask is not None or label is not None) + int(prediction is not None)
-        fig, ax = plt.subplots(1, num_images, figsize=(5*num_images, 5))
+        fig, ax = plt.subplots(1, num_images, figsize=(5 * num_images, 5))
 
         for i, (mod, image) in enumerate(images.items()):
             ax[i].imshow(image)

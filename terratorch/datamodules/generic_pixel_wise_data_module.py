@@ -6,17 +6,16 @@ This module contains generic data modules for instantiation at runtime.
 
 import logging
 import os
-from albumentations.core.composition import BaseCompose
-from albumentations.core.composition import Compose
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Hashable, Iterable
 from pathlib import Path
-from typing import Any, Dict, Hashable, List, Optional
+from typing import Any, Dict, List, Optional
 
 import albumentations as A
 import kornia.augmentation as K
 import numpy as np
 import tacoreader
 import torch
+from albumentations.core.composition import BaseCompose, Compose
 from kornia.augmentation import AugmentationSequential
 from torch import Tensor
 from torch.utils.data import DataLoader
@@ -261,7 +260,7 @@ class GenericNonGeoSegmentationDataModule(NonGeoDataModule):
                 reduce_zero_label=self.reduce_zero_label,
                 tortilla_df=self.tortilla_df,
                 tortilla_indices=self._get_tortilla_indices(stage),
-                return_georeference = self.return_georeference
+                return_georeference=self.return_georeference,
             )
         if stage in ["fit", "validate"]:
             self.val_dataset = self.dataset_class(
@@ -286,7 +285,7 @@ class GenericNonGeoSegmentationDataModule(NonGeoDataModule):
                 reduce_zero_label=self.reduce_zero_label,
                 tortilla_df=self.tortilla_df,
                 tortilla_indices=self._get_tortilla_indices(stage),
-                return_georeference=self.return_georeference
+                return_georeference=self.return_georeference,
             )
         if stage in ["test"]:
             self.test_dataset = self.dataset_class(
@@ -311,7 +310,7 @@ class GenericNonGeoSegmentationDataModule(NonGeoDataModule):
                 reduce_zero_label=self.reduce_zero_label,
                 tortilla_df=self.tortilla_df,
                 tortilla_indices=self._get_tortilla_indices(stage),
-                return_georeference=self.return_georeference
+                return_georeference=self.return_georeference,
             )
         if stage in ["predict"] and self.predict_root:
             self.predict_dataset = self.dataset_class(
@@ -330,7 +329,7 @@ class GenericNonGeoSegmentationDataModule(NonGeoDataModule):
                 pca_step=self.pca_step,
                 expand_temporal_dimension=self.expand_temporal_dimension,
                 reduce_zero_label=self.reduce_zero_label,
-                return_georeference=self.return_georeference
+                return_georeference=self.return_georeference,
             )
 
     def _dataloader_factory(self, split: str) -> DataLoader[dict[str, Tensor]]:
@@ -396,9 +395,9 @@ class GenericNonGeoPixelwiseRegressionDataModule(NonGeoDataModule):
         predict_output_bands: list[HLSBands | int | tuple[int, int] | str] | None = None,
         constant_scale: float = 1,
         rgb_indices: list[int] | None = None,
-        train_transform: Optional[List[Any]] = None,
-        val_transform: Optional[List[Any]] = None,
-        test_transform: Optional[List[Any]] = None,
+        train_transform: list[Any] | None = None,
+        val_transform: list[Any] | None = None,
+        test_transform: list[Any] | None = None,
         expand_temporal_dimension: bool = False,
         reduce_zero_label: bool = False,
         no_data_replace: float | None = None,

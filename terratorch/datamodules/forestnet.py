@@ -3,30 +3,16 @@ from typing import Any
 
 import albumentations as A
 import kornia.augmentation as K  # noqa: N812
-
-from terratorch.datamodules.generic_pixel_wise_data_module import Normalize
-from terratorch.datamodules.generic_multimodal_data_module import wrap_in_compose_is_list
-from terratorch.datasets import ForestNetNonGeo
-from torchgeo.datamodules import NonGeoDataModule
 from kornia.augmentation import AugmentationSequential
+from torchgeo.datamodules import NonGeoDataModule
 
-MEANS = {
-    "BLUE": 19.8680,
-    "GREEN": 28.1656,
-    "RED": 14.9309,
-    "NIR": 82.1076,
-    "SWIR_1": 39.4819,
-    "SWIR_2": 17.7241
-}
+from terratorch.datamodules.generic_multimodal_data_module import wrap_in_compose_is_list
+from terratorch.datamodules.generic_pixel_wise_data_module import Normalize
+from terratorch.datasets import ForestNetNonGeo
 
-STDS = {
-    "BLUE": 17.4523,
-    "GREEN": 15.8399,
-    "RED": 17.9444,
-    "NIR": 21.4439,
-    "SWIR_1": 14.4642,
-    "SWIR_2": 9.9120
-}
+MEANS = {"BLUE": 19.8680, "GREEN": 28.1656, "RED": 14.9309, "NIR": 82.1076, "SWIR_1": 39.4819, "SWIR_2": 17.7241}
+
+STDS = {"BLUE": 17.4523, "GREEN": 15.8399, "RED": 17.9444, "NIR": 21.4439, "SWIR_1": 14.4642, "SWIR_2": 9.9120}
 
 
 class ForestNetNonGeoDataModule(NonGeoDataModule):

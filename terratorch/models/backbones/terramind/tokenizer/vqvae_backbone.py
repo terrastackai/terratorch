@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import torch
+
 from .vqvae import VQ
 
 

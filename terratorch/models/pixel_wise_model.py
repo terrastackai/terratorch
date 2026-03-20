@@ -1,6 +1,7 @@
 # Copyright contributors to the Terratorch project
+import logging
 from typing import List
-import logging 
+
 import torch
 import torch.nn.functional as F  # noqa: N812
 from segmentation_models_pytorch.base import SegmentationModel
@@ -8,7 +9,8 @@ from torch import nn
 
 from terratorch.models.heads import RegressionHead, SegmentationHead
 from terratorch.models.model import AuxiliaryHeadWithDecoderWithoutInstantiatedHead, Model, ModelOutput
-from terratorch.models.utils import pad_images, get_image_size, center_crop
+from terratorch.models.utils import center_crop, get_image_size, pad_images
+
 
 def freeze_module(module: nn.Module):
     for param in module.parameters():
@@ -27,7 +29,7 @@ class PixelWiseModel(Model, SegmentationModel):
         encoder: nn.Module,
         decoder: nn.Module,
         head_kwargs: dict,
-        patch_size: int = None, 
+        patch_size: int = None,
         padding: str = None,
         decoder_includes_head: bool = False,
         auxiliary_heads: list[AuxiliaryHeadWithDecoderWithoutInstantiatedHead] | None = None,
@@ -66,9 +68,11 @@ class PixelWiseModel(Model, SegmentationModel):
         if auxiliary_heads is not None:
             aux_heads = {}
             for aux_head_to_be_instantiated in auxiliary_heads:
-                aux_head: nn.Module = self._get_head(
-                    task, aux_head_to_be_instantiated.decoder.out_channels, head_kwargs
-                ) if not aux_head_to_be_instantiated.decoder_includes_head else nn.Identity()
+                aux_head: nn.Module = (
+                    self._get_head(task, aux_head_to_be_instantiated.decoder.out_channels, head_kwargs)
+                    if not aux_head_to_be_instantiated.decoder_includes_head
+                    else nn.Identity()
+                )
                 aux_head = nn.Sequential(aux_head_to_be_instantiated.decoder, aux_head)
                 aux_heads[aux_head_to_be_instantiated.name] = aux_head
         else:
@@ -81,6 +85,7 @@ class PixelWiseModel(Model, SegmentationModel):
             # only for backwards compatibility with pre-neck times.
             def model_defined_neck(x, **kwargs):
                 return self.encoder.prepare_features_for_image_model(x)  # Drop kwargs
+
             self.neck = model_defined_neck
         else:
             self.neck = lambda x, image_size: x
@@ -115,9 +120,7 @@ class PixelWiseModel(Model, SegmentationModel):
     def forward(self, x: torch.Tensor, **kwargs) -> ModelOutput:
         """Sequentially pass `x` through model`s encoder, decoder and heads"""
 
-        image_size_out = (self.image_size_out
-                          or kwargs.get('image_size', None)
-                          or get_image_size(x))
+        image_size_out = self.image_size_out or kwargs.get("image_size", None) or get_image_size(x)
 
         if self.patch_size and self.padding is not None:
             x = pad_images(x, self.patch_size, self.padding)
@@ -143,7 +146,6 @@ class PixelWiseModel(Model, SegmentationModel):
             aux_output = self._check_for_single_channel_and_squeeze(aux_output)
             aux_output = center_crop(aux_output, image_size_out)
             aux_outputs[name] = aux_output
-
 
         return ModelOutput(output=mask, auxiliary_heads=aux_outputs)
 

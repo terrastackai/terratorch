@@ -19,6 +19,7 @@ from terratorch.datasets.utils import (
 
 class MBigEarthNonGeo(NonGeoDataset):
     """NonGeo dataset implementation for [M-BigEarthNet](https://github.com/ServiceNow/geo-bench?tab=readme-ov-file)."""
+
     all_band_names = (
         "COASTAL_AEROSOL",
         "BLUE",

@@ -21,6 +21,7 @@ from terratorch.datasets.utils import (
 
 class MSo2SatNonGeo(NonGeoDataset):
     """NonGeo dataset implementation for [M-So2Sat](https://github.com/ServiceNow/geo-bench?tab=readme-ov-file)."""
+
     all_band_names = (
         "VH_REAL",
         "BLUE",

@@ -24,8 +24,8 @@ WAVELENGTHS = {
     "nir08": 0.865,
     "swir16": 1.61,
     "swir22": 2.19,
-    "vv": 3.5, #TODO: choose one vv
-    "vh": 4.0, #TODO: choose one vh
+    "vv": 3.5,  # TODO: choose one vv
+    "vh": 4.0,  # TODO: choose one vh
     "COASTAL_AEROSOL": 0.44,
     "BLUE": 0.49,
     "GREEN": 0.56,

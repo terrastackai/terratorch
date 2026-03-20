@@ -25,7 +25,7 @@ class FCBlock(nn.Module):
 
 
 class WavesTransformer(nn.Module):
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         wave_dim,
         output_dim,
@@ -51,17 +51,13 @@ class WavesTransformer(nn.Module):
         self.fc_weight = nn.Linear(wave_dim, output_dim)
         self.fc_bias = None if self.is_decoder else nn.Linear(wave_dim, embed_dim)
 
-        self.weight_tokens = nn.Parameter(
-            torch.randn(self.num_latent_tokens, wave_dim) * 0.02
-        )
+        self.weight_tokens = nn.Parameter(torch.randn(self.num_latent_tokens, wave_dim) * 0.02)
         self.bias_token = nn.Parameter(torch.randn(1, wave_dim) * 0.02)
 
     def forward(self, x):
         x = torch.cat([self.weight_tokens, x, self.bias_token], dim=0)
         out = self.encoder(x)
-        weights = self.fc_weight(
-            out[self.num_latent_tokens : -1] + x[self.num_latent_tokens : -1]
-        )
+        weights = self.fc_weight(out[self.num_latent_tokens : -1] + x[self.num_latent_tokens : -1])
         bias = None if self.is_decoder else self.fc_bias(out[-1])
         return weights, bias
 
@@ -121,9 +117,7 @@ class DynamicEmbedding(nn.Module):
             )
             if bias is not None:
                 bias = rearrange(bias, "b -> (b)")
-            dynamic_out = F.conv2d(
-                batch, dynamic_weight * 0.02, bias=bias, stride=self.patch_size
-            )
+            dynamic_out = F.conv2d(batch, dynamic_weight * 0.02, bias=bias, stride=self.patch_size)
             x = rearrange(dynamic_out, "b c h w -> b (h w) c")
 
         return x, waves

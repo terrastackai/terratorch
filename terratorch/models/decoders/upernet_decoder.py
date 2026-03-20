@@ -1,9 +1,11 @@
+import warnings
+
 import torch
 import torch.nn.functional as F  # noqa: N812
 from torch import Tensor, nn
-import warnings
 
 from terratorch.registry import TERRATORCH_DECODER_REGISTRY
+
 from .utils import ConvModule
 
 
@@ -43,15 +45,12 @@ class UperNetDecoder(nn.Module):
         self.scale_modules = scale_modules
         if scale_modules:
             self.fpn1 = nn.Sequential(
-                nn.ConvTranspose2d(embed_dim[0],
-                                embed_dim[0] // 2, 2, 2),
+                nn.ConvTranspose2d(embed_dim[0], embed_dim[0] // 2, 2, 2),
                 nn.BatchNorm2d(embed_dim[0] // 2),
                 nn.GELU(),
-                nn.ConvTranspose2d(embed_dim[0] // 2,
-                                embed_dim[0] // 4, 2, 2))
-            self.fpn2 = nn.Sequential(
-                nn.ConvTranspose2d(embed_dim[1],
-                                embed_dim[1] // 2, 2, 2))
+                nn.ConvTranspose2d(embed_dim[0] // 2, embed_dim[0] // 4, 2, 2),
+            )
+            self.fpn2 = nn.Sequential(nn.ConvTranspose2d(embed_dim[1], embed_dim[1] // 2, 2, 2))
             self.fpn3 = nn.Sequential(nn.Identity())
             self.fpn4 = nn.Sequential(nn.MaxPool2d(kernel_size=2, stride=2))
             self.embed_dim = [embed_dim[0] // 4, embed_dim[1] // 2, embed_dim[2], embed_dim[3]]

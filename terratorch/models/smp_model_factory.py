@@ -202,7 +202,7 @@ class SMPModelFactory(ModelFactory):
                 **smp_kwargs,
             }
 
-        model = model_module(**model_args) # TODO: Check if pass aux_params needed
+        model = model_module(**model_args)  # TODO: Check if pass aux_params needed
 
         return SMPModelWrapper(
             model, relu=task == "regression" and regression_relu, squeeze_single_class=task == "regression"

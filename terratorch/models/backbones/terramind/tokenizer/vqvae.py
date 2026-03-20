@@ -18,30 +18,30 @@
 # licensed under the Apache License, Version 2.0.
 # Source: https://github.com/apple/ml-4m/
 
-from contextlib import nullcontext
 import copy
+from contextlib import nullcontext
+
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange, repeat
 from huggingface_hub import PyTorchModelHubMixin
-
-from .quantizers import (
-    VectorQuantizerLucid,
-    Memcodes,
-    FiniteScalarQuantizer,
-)
-from .models import vit_models
-from .models.unet import unet
-from .models import uvit
-from .models.mlp_models import build_mlp
-from .scheduling import (
-    DDPMScheduler,
-    DDIMScheduler,
-    PipelineCond,
-)
+from torch import nn
 
 from terratorch.models.backbones.terramind.utils import denormalize
+
+from .models import uvit, vit_models
+from .models.mlp_models import build_mlp
+from .models.unet import unet
+from .quantizers import (
+    FiniteScalarQuantizer,
+    Memcodes,
+    VectorQuantizerLucid,
+)
+from .scheduling import (
+    DDIMScheduler,
+    DDPMScheduler,
+    PipelineCond,
+)
 
 try:
     from diffusers.schedulers.scheduling_utils import SchedulerMixin
@@ -162,9 +162,7 @@ class VQ(nn.Module, PyTorchModelHubMixin):
 
         # For semantic segmentation
         if n_labels is not None:
-            self.cls_emb = nn.Embedding(
-                num_embeddings=n_labels, embedding_dim=n_channels
-            )
+            self.cls_emb = nn.Embedding(num_embeddings=n_labels, embedding_dim=n_channels)
             self.colorize = torch.randn(3, n_labels, 1, 1)
         else:
             self.cls_emb = None
@@ -290,7 +288,7 @@ class VQ(nn.Module, PyTorchModelHubMixin):
         for k in keys:
             for ik in ignore_keys:
                 if k.startswith(ik):
-                    print("Deleting key {} from state_dict.".format(k))
+                    print(f"Deleting key {k} from state_dict.")
                     del sd[k]
         msg = self.load_state_dict(sd, strict=False)
         print(msg)
@@ -332,7 +330,10 @@ class VQ(nn.Module, PyTorchModelHubMixin):
         return x
 
     def encode(
-        self, x: torch.Tensor, *args, **kwargs,
+        self,
+        x: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
         """Encodes an input image tensor and quantizes the latent code.
 
@@ -410,8 +411,10 @@ class VQ(nn.Module, PyTorchModelHubMixin):
         """
         quant = self.tokens_to_embedding(tokens)
         # Get image size from token shape
-        image_size = (kwargs.pop("image_size", None) or
-                      (tokens.shape[-2] * self.patch_size, tokens.shape[-1] * self.patch_size))
+        image_size = kwargs.pop("image_size", None) or (
+            tokens.shape[-2] * self.patch_size,
+            tokens.shape[-1] * self.patch_size,
+        )
 
         dec = self.decode_quant(quant, image_size=image_size, **kwargs)
         return dec
@@ -483,9 +486,7 @@ class VQVAE(VQ):
             )
             self.dec_dim = self.decoder.dim_tokens
         elif "MLP" in dec_type:
-            self.decoder = build_mlp(
-                model_id=dec_type, dim_in=None, dim_out=out_channels
-            )
+            self.decoder = build_mlp(model_id=dec_type, dim_in=None, dim_out=out_channels)
             self.dec_dim = self.decoder.dim_in
         else:
             raise NotImplementedError(f"{dec_type} not implemented.")
@@ -627,9 +628,7 @@ class DiVAE(VQ):
         self.zero_terminal_snr = zero_terminal_snr
 
         if cls_free_guidance_dropout > 0.0:
-            self.cfg_dist = torch.distributions.Bernoulli(
-                probs=cls_free_guidance_dropout
-            )
+            self.cfg_dist = torch.distributions.Bernoulli(probs=cls_free_guidance_dropout)
         else:
             self.cfg_dist = None
         self.masked_cfg = masked_cfg
@@ -676,9 +675,7 @@ class DiVAE(VQ):
         if self.ckpt_path is not None:
             self.init_from_ckpt(self.ckpt_path, ignore_keys=self.ignore_keys)
 
-    def sample_mask(
-        self, quant: torch.Tensor, low: int = 0, high: int | None = None
-    ) -> torch.BoolTensor:
+    def sample_mask(self, quant: torch.Tensor, low: int = 0, high: int | None = None) -> torch.BoolTensor:
         """Returns a mask of shape B H_Q W_Q, where True = masked-out, False = keep.
 
         Args:
@@ -694,13 +691,9 @@ class DiVAE(VQ):
         num_tokens = H_Q * W_Q
         high = high if high is not None else num_tokens
 
-        zero_idxs = torch.randint(
-            low=low, high=high + 1, size=(B,), device=quant.device
-        )
+        zero_idxs = torch.randint(low=low, high=high + 1, size=(B,), device=quant.device)
         noise = torch.rand(B, num_tokens, device=quant.device)
-        ids_arange_shuffle = torch.argsort(
-            noise, dim=1
-        )  # ascend: small is keep, large is remove
+        ids_arange_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
         mask = torch.where(ids_arange_shuffle < zero_idxs.unsqueeze(1), 0, 1)
         mask = rearrange(mask, "b (h w) -> b h w", h=H_Q, w=W_Q).bool()
 
@@ -716,9 +709,7 @@ class DiVAE(VQ):
         Returns:
             Conditional diffusion pipeline.
         """
-        return PipelineCond(
-            model=self.decoder, scheduler=scheduler, n_channels=self.n_channels
-        )
+        return PipelineCond(model=self.decoder, scheduler=scheduler, n_channels=self.n_channels)
 
     def decode_quant(
         self,
@@ -816,7 +807,7 @@ class DiVAE(VQ):
         self,
         input_clean: torch.Tensor,
         input_noised: torch.Tensor,
-        timesteps: torch.Tensor |float | int,
+        timesteps: torch.Tensor | float | int,
         cond_mask: torch.Tensor | None = None,
         orig_res: torch.LongTensor | tuple[int, int] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -846,12 +837,8 @@ class DiVAE(VQ):
             cond_mask = self.cfg_dist.sample((B,)).to(quant.device, dtype=torch.bool)
             cond_mask = repeat(cond_mask, "b -> b h w", h=H_Q, w=W_Q)
             if self.masked_cfg:
-                mask = self.sample_mask(
-                    quant, low=self.masked_cfg_low, high=self.masked_cfg_high
-                )
+                mask = self.sample_mask(quant, low=self.masked_cfg_low, high=self.masked_cfg_high)
                 cond_mask = mask * cond_mask
 
-        dec = self.decoder(
-            input_noised, timesteps, quant, cond_mask=cond_mask, orig_res=orig_res
-        )
+        dec = self.decoder(input_noised, timesteps, quant, cond_mask=cond_mask, orig_res=orig_res)
         return dec, code_loss

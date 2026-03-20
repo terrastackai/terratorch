@@ -30,8 +30,5 @@ class MRLLoss(nn.Module):
         representations: [(batch, features), ...]
         targets: (batch, features)
         """
-        losses = [
-            self.weights[i] * (1 - self.criterion(rep, targets)).mean()
-            for i, rep in enumerate(representations)
-        ]
+        losses = [self.weights[i] * (1 - self.criterion(rep, targets)).mean() for i, rep in enumerate(representations)]
         return sum(losses) / len(losses)

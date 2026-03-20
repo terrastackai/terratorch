@@ -4,8 +4,8 @@
 """Harmonized Landsat and Sentinel-2 datasets."""
 
 import abc
-from collections.abc import Iterable, Sequence
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable, Iterable, Sequence
+from typing import Any, Optional, Union
 
 from rasterio.crs import CRS
 from torchgeo.datasets import Landsat
@@ -19,7 +19,7 @@ class HLS(Landsat, abc.ABC):
     aiming to produce a seamless surface reflectance record from the
     Operational Land Imager (OLI) and Multi-Spectral Instrument (MSI) aboard
     Landsat-8/9 and Sentinel-2A/B remote sensing satellites, respectively.
-    The HLS products are hosted at `LP DAAC 
+    The HLS products are hosted at `LP DAAC
     <https://hls.gsfc.nasa.gov/hls-data/>`_, and created from a set of
     algorithms: atmospheric correction, cloud and cloud-shadow masking,
     geographic co-registration and common gridding, bidirectional reflectance
@@ -50,11 +50,11 @@ class HLS(Landsat, abc.ABC):
 
     def init(
         self,
-        paths: Union[str, Iterable[str]] = "data",
-        crs: Optional[CRS] = None,
-        res: Optional[float] = None,
-        bands: Optional[Sequence[str]] = None,
-        transforms: Optional[Callable[[dict[str, Any]], dict[str, Any]]] = None,
+        paths: str | Iterable[str] = "data",
+        crs: CRS | None = None,
+        res: float | None = None,
+        bands: Sequence[str] | None = None,
+        transforms: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         cache: bool = True,
     ) -> None:
         """Initialize a new dataset instance.
@@ -71,7 +71,7 @@ class HLS(Landsat, abc.ABC):
         Raises:
             FileNotFoundError: if no files are found in ``root``
         """
-        
+
         super().__init__(paths, crs, res, bands, transforms, cache)
 
 

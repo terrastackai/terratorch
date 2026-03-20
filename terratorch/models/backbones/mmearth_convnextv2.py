@@ -4,13 +4,11 @@
 from argparse import Namespace
 
 import torch
-import torch.nn as nn
-from timm.layers import trunc_normal_, DropPath
-from torch import Tensor
+from timm.layers import DropPath, LayerNorm, trunc_normal_
 
-#from .norm_layers import LayerNorm, GRN
+# from .norm_layers import LayerNorm, GRN
 from timm.layers import GlobalResponseNormMlp as GRN
-from timm.layers import LayerNorm
+from torch import Tensor, nn
 
 from terratorch.registry import TERRATORCH_BACKBONE_REGISTRY
 
@@ -29,19 +27,13 @@ class Block(nn.Module):
 
     def __init__(self, dim, drop_path=0.0):
         super().__init__()
-        self.dwconv: nn.Module = nn.Conv2d(
-            dim, dim, kernel_size=7, padding=3, groups=dim
-        )  # depth-wise conv
+        self.dwconv: nn.Module = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depth-wise conv
         self.norm: nn.Module = LayerNorm(dim, eps=1e-6)
-        self.pwconv1: nn.Module = nn.Linear(
-            dim, 4 * dim
-        )  # point-wise/1x1 convs, implemented with linear layers
+        self.pwconv1: nn.Module = nn.Linear(dim, 4 * dim)  # point-wise/1x1 convs, implemented with linear layers
         self.act: nn.Module = nn.GELU()
         self.grn: nn.Module = GRN(4 * dim)
         self.pwconv2: nn.Module = nn.Linear(4 * dim, dim)
-        self.drop_path: nn.Module = (
-            DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        )
+        self.drop_path: nn.Module = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x: Tensor) -> Tensor:
         input = x
@@ -91,9 +83,7 @@ class ConvNeXtV2(nn.Module):
         self.img_size = img_size
         self.use_orig_stem = use_orig_stem
         self.num_stage = len(depths)
-        self.downsample_layers = (
-            nn.ModuleList()
-        )  # stem and 3 intermediate downsampling conv layer
+        self.downsample_layers = nn.ModuleList()  # stem and 3 intermediate downsampling conv layer
         self.patch_size = patch_size
         if dims is None:
             dims = [96, 192, 384, 768]
@@ -106,12 +96,12 @@ class ConvNeXtV2(nn.Module):
                     kernel_size=patch_size // (2 ** (self.num_stage - 1)),
                     stride=patch_size // (2 ** (self.num_stage - 1)),
                 ),
-                LayerNorm(dims[0], eps=1e-6), #data_format="channels_first"),
+                LayerNorm(dims[0], eps=1e-6),  # data_format="channels_first"),
             )
         else:
             self.initial_conv = nn.Sequential(
                 nn.Conv2d(in_chans, dims[0], kernel_size=3, stride=1),
-                LayerNorm(dims[0], eps=1e-6), #data_format="channels_first"),
+                LayerNorm(dims[0], eps=1e-6),  # data_format="channels_first"),
                 nn.GELU(),
             )
             # depthwise conv for stem
@@ -124,28 +114,21 @@ class ConvNeXtV2(nn.Module):
                     padding=(patch_size // (2 ** (self.num_stage - 1))) // 2,
                     groups=dims[0],
                 ),
-                LayerNorm(dims[0], eps=1e-6), #data_format="channels_first"),
+                LayerNorm(dims[0], eps=1e-6),  # data_format="channels_first"),
             )
 
         for i in range(3):
             downsample_layer = nn.Sequential(
-                LayerNorm(dims[i], eps=1e-6), #data_format="channels_first"),
+                LayerNorm(dims[i], eps=1e-6),  # data_format="channels_first"),
                 nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
             )
             self.downsample_layers.append(downsample_layer)
 
-        self.stages = (
-            nn.ModuleList()
-        )  # 4 feature resolution stages, each consisting of multiple residual blocks
+        self.stages = nn.ModuleList()  # 4 feature resolution stages, each consisting of multiple residual blocks
         dp_rates = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
         cur = 0
         for i in range(self.num_stage):
-            stage = nn.Sequential(
-                *[
-                    Block(dim=dims[i], drop_path=dp_rates[cur + j])
-                    for j in range(depths[i])
-                ]
-            )
+            stage = nn.Sequential(*[Block(dim=dims[i], drop_path=dp_rates[cur + j]) for j in range(depths[i])])
             self.stages.append(stage)
             cur += depths[i]
 
@@ -173,18 +156,12 @@ class ConvNeXtV2(nn.Module):
             x = self.downsample_layers[i](x)
             x = self.stages[i + 1](x)
 
-        return self.norm(
-            x.mean([-2, -1])
-        )  # global average pooling, (N, C, H, W) -> (N, C)
+        return self.norm(x.mean([-2, -1]))  # global average pooling, (N, C, H, W) -> (N, C)
 
     def upsample_mask(self, mask, scale):
         assert len(mask.shape) == 2
         p = int(mask.shape[1] ** 0.5)
-        return (
-            mask.reshape(-1, p, p)
-            .repeat_interleave(scale, axis=1)
-            .repeat_interleave(scale, axis=2)
-        )
+        return mask.reshape(-1, p, p).repeat_interleave(scale, axis=1).repeat_interleave(scale, axis=2)
 
     def forward(self, x: Tensor, mask: Tensor = None) -> Tensor:
         if mask is not None:  # for the pretraining case

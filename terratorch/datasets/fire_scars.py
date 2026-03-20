@@ -25,6 +25,7 @@ from terratorch.datasets.utils import clip_image_percentile, default_transform, 
 
 class FireScarsNonGeo(NonGeoDataset):
     """NonGeo dataset implementation for [fire scars](https://huggingface.co/datasets/ibm-nasa-geospatial/hls_burn_scars)."""
+
     all_band_names = (
         "BLUE",
         "GREEN",
@@ -39,7 +40,7 @@ class FireScarsNonGeo(NonGeoDataset):
     BAND_SETS = {"all": all_band_names, "rgb": rgb_bands}
 
     num_classes = 2
-    splits = {"train": "training", "val": "validation"}   # Only train and val splits available
+    splits = {"train": "training", "val": "validation"}  # Only train and val splits available
 
     def __init__(
         self,
@@ -132,8 +133,9 @@ class FireScarsNonGeo(NonGeoDataset):
 
         output = {
             "image": image.astype(np.float32),
-            "mask": self._load_file(
-                self.segmentation_mask_files[index], nan_replace=self.no_label_replace).to_numpy()[0],
+            "mask": self._load_file(self.segmentation_mask_files[index], nan_replace=self.no_label_replace).to_numpy()[
+                0
+            ],
         }
         if self.transform:
             output = self.transform(**output)

@@ -228,7 +228,7 @@ class Sen4AgriNet(NonGeoDataset):
 
         for i, image in enumerate(images):
             ax[i // cols, i % cols].imshow(image)
-            ax[i // cols, i % cols].set_title(f"T{i+1} - Day {dates[i].item()}")
+            ax[i // cols, i % cols].set_title(f"T{i + 1} - Day {dates[i].item()}")
             ax[i // cols, i % cols].axis(axes_visibility)
 
         if labels is not None:

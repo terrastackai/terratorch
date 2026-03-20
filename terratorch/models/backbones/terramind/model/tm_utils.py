@@ -86,7 +86,7 @@ class DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None):
-        super(DropPath, self).__init__()
+        super().__init__()
         self.drop_prob = drop_prob
 
     def forward(self, x):
@@ -153,7 +153,13 @@ class GatedMlp(nn.Module):
 
 class Attention(nn.Module):
     def __init__(
-        self, dim, num_heads=8, qkv_bias=False, proj_bias=True, attn_drop=0.0, proj_drop=0.0,
+        self,
+        dim,
+        num_heads=8,
+        qkv_bias=False,
+        proj_bias=True,
+        attn_drop=0.0,
+        proj_drop=0.0,
     ):
         super().__init__()
         self.num_heads = num_heads
@@ -178,7 +184,9 @@ class Attention(nn.Module):
             attn_mask = None
 
         y = F.scaled_dot_product_attention(
-            q, k, v,
+            q,
+            k,
+            v,
             attn_mask=attn_mask,
             dropout_p=self.attn_drop.p if self.training else 0.0,
             scale=self.scale,
@@ -192,7 +200,13 @@ class Attention(nn.Module):
 
 class CrossAttention(nn.Module):
     def __init__(
-        self, dim, num_heads=8, qkv_bias=False, proj_bias=True, attn_drop=0.0, proj_drop=0.0,
+        self,
+        dim,
+        num_heads=8,
+        qkv_bias=False,
+        proj_bias=True,
+        attn_drop=0.0,
+        proj_drop=0.0,
     ):
         super().__init__()
         self.num_heads = num_heads
@@ -214,7 +228,6 @@ class CrossAttention(nn.Module):
         kv = self.kv(context).reshape(B, M, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         k, v = kv[0], kv[1]  # (B, H, M, Dh)
 
-
         if mask is not None:
             # In TerraMind: True = "do not attend" -> PyTorch: True = model *should* attend -> invert
             if mask.dim() == 2:  # (B, M) key-padding mask
@@ -227,7 +240,9 @@ class CrossAttention(nn.Module):
             attn_mask = None
 
         y = F.scaled_dot_product_attention(
-            q, k, v,
+            q,
+            k,
+            v,
             attn_mask=attn_mask,
             dropout_p=self.attn_drop.p if self.training else 0.0,
             scale=self.scale,

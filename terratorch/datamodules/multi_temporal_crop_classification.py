@@ -106,8 +106,8 @@ class MultiTemporalCropClassificationDataModule(NonGeoDataModule):
                 bands=self.bands,
                 no_data_replace=self.no_data_replace,
                 no_label_replace=self.no_label_replace,
-                expand_temporal_dimension = self.expand_temporal_dimension,
-                reduce_zero_label = self.reduce_zero_label,
+                expand_temporal_dimension=self.expand_temporal_dimension,
+                reduce_zero_label=self.reduce_zero_label,
                 use_metadata=self.use_metadata,
                 metadata_file_name=self.metadata_file_name,
             )
@@ -119,8 +119,8 @@ class MultiTemporalCropClassificationDataModule(NonGeoDataModule):
                 bands=self.bands,
                 no_data_replace=self.no_data_replace,
                 no_label_replace=self.no_label_replace,
-                expand_temporal_dimension = self.expand_temporal_dimension,
-                reduce_zero_label = self.reduce_zero_label,
+                expand_temporal_dimension=self.expand_temporal_dimension,
+                reduce_zero_label=self.reduce_zero_label,
                 use_metadata=self.use_metadata,
                 metadata_file_name=self.metadata_file_name,
             )
@@ -132,8 +132,8 @@ class MultiTemporalCropClassificationDataModule(NonGeoDataModule):
                 bands=self.bands,
                 no_data_replace=self.no_data_replace,
                 no_label_replace=self.no_label_replace,
-                expand_temporal_dimension = self.expand_temporal_dimension,
-                reduce_zero_label = self.reduce_zero_label,
+                expand_temporal_dimension=self.expand_temporal_dimension,
+                reduce_zero_label=self.reduce_zero_label,
                 use_metadata=self.use_metadata,
                 metadata_file_name=self.metadata_file_name,
             )
@@ -145,8 +145,8 @@ class MultiTemporalCropClassificationDataModule(NonGeoDataModule):
                 bands=self.bands,
                 no_data_replace=self.no_data_replace,
                 no_label_replace=self.no_label_replace,
-                expand_temporal_dimension = self.expand_temporal_dimension,
-                reduce_zero_label = self.reduce_zero_label,
+                expand_temporal_dimension=self.expand_temporal_dimension,
+                reduce_zero_label=self.reduce_zero_label,
                 use_metadata=self.use_metadata,
                 metadata_file_name=self.metadata_file_name,
             )

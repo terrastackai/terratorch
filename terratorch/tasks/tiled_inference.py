@@ -5,12 +5,14 @@ e.g. cropping out areas around model prediction to reduce artifacts
 It additionally rebatches after the fold operation to gain speed up.
 """
 
-import torch
-import tqdm
 import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
+
+import torch
+import tqdm
+
 from terratorch.models.utils import pad_images
 
 
@@ -127,7 +129,7 @@ def get_input_chips(
             InferenceInput(
                 b,
                 (slice(i + delta, i + h_crop - delta), slice(w_img - w_crop + delta, w_img - delta))
-                if padding 
+                if padding
                 else (slice(i, i + h_crop), slice(w_img - w_crop, w_img)),
                 patch[b],
                 border_blend_mask,
@@ -142,8 +144,8 @@ def get_input_chips(
         coordinates_and_inputs += [
             InferenceInput(
                 b,
-                (slice(h_img - h_crop + delta, h_img - delta), slice(i + delta, i + w_crop - delta)) 
-                if padding 
+                (slice(h_img - h_crop + delta, h_img - delta), slice(i + delta, i + w_crop - delta))
+                if padding
                 else (slice(h_img - h_crop, h_img), slice(i, i + w_crop)),
                 patch[b],
                 border_blend_mask,
@@ -157,8 +159,8 @@ def get_input_chips(
     coordinates_and_inputs += [
         InferenceInput(
             b,
-            (slice(h_img - h_crop + delta, h_img - delta), slice(w_img - w_crop + delta, w_img - delta)) 
-            if padding 
+            (slice(h_img - h_crop + delta, h_img - delta), slice(w_img - w_crop + delta, w_img - delta))
+            if padding
             else (slice(h_img - h_crop, h_img), slice(w_img - w_crop, w_img)),
             patch[b],
             border_blend_mask,
@@ -176,7 +178,7 @@ def get_input_chips(
                     InferenceInput(
                         b,
                         (slice(row + delta, row + h_crop - delta), slice(col + delta, col + w_crop - delta))
-                        if padding 
+                        if padding
                         else (slice(row, row + h_crop), slice(col, col + w_crop)),
                         patch[b],
                         border_blend_mask,
@@ -199,6 +201,7 @@ def get_input_chips(
 
     return coordinates_and_inputs
 
+
 def prepare_tiled_inference_input(
     input_batch: torch.Tensor,
     out_channels: int | None = None,
@@ -212,7 +215,7 @@ def prepare_tiled_inference_input(
     h_stride: int | None = None,
     w_stride: int | None = None,
     padding: str | bool = "reflect",
-    device: str | None = None
+    device: str | None = None,
 ) -> tuple[list[InferenceInput], Callable[[torch.Tensor], dict | torch.Tensor], int, int, int, str | torch.device]:
 
     if inference_parameters is not None:
@@ -253,24 +256,23 @@ def prepare_tiled_inference_input(
         # Tiled inference is implemented for single tensors.
         # We concatenate all tensors and reshape them before the model forward
         t_dims = t_dims[0]
-        if t_dims == 4: # B, C, H, W
+        if t_dims == 4:  # B, C, H, W
             channel_length = [t.shape[-3] for t in tensors]
             channel_start = torch.tensor([0] + channel_length).cumsum(0)
             input_batch = torch.concat(tensors, dim=-3)
-        elif t_dims == 5:# B, C, T, H, W
+        elif t_dims == 5:  # B, C, T, H, W
             channel_length = [t.shape[-4] for t in tensors]
             channel_start = torch.tensor([0] + channel_length).cumsum(0)
             input_batch = torch.concat(tensors, dim=-4)
         else:
-            raise ValueError(f"Tensors must have 4 or 5 dimensions")
-
+            raise ValueError("Tensors must have 4 or 5 dimensions")
 
         def tensor_reshape(t):
             # Convert tensor back to dict of tensors
-            if t_dims == 4: # B, C, H, W
-                out = {m: t[..., s:s+l, :, :] for m, s, l in zip(modalities, channel_start, channel_length)}
-            elif t_dims == 5:# B, C, T, H, W
-                out = {m: t[..., s:s+l, :, :, :] for m, s, l in zip(modalities, channel_start, channel_length)}
+            if t_dims == 4:  # B, C, H, W
+                out = {m: t[..., s : s + l, :, :] for m, s, l in zip(modalities, channel_start, channel_length)}
+            elif t_dims == 5:  # B, C, T, H, W
+                out = {m: t[..., s : s + l, :, :, :] for m, s, l in zip(modalities, channel_start, channel_length)}
             return out
 
     elif isinstance(input_batch, torch.Tensor):
@@ -308,14 +310,16 @@ def prepare_tiled_inference_input(
 
     return coordinates_and_inputs, tensor_reshape, input_batch_size, h_img, w_img, ret_device, delta
 
-def generate_tiled_inference_output(outputs,
-                                    input_batch_size: int,
-                                    h_img: int,
-                                    w_img: int,
-                                    delta: int,
-                                    padding: str | bool = "reflect",
-                                    average_patches: bool = True,
-    ) -> torch.Tensor:
+
+def generate_tiled_inference_output(
+    outputs,
+    input_batch_size: int,
+    h_img: int,
+    w_img: int,
+    delta: int,
+    padding: str | bool = "reflect",
+    average_patches: bool = True,
+) -> torch.Tensor:
     preds: torch.Tensor | None = None
     preds_count: torch.Tensor | None = None
 
@@ -325,9 +329,7 @@ def generate_tiled_inference_output(outputs,
             out_channels = 1 if len(predicted.shape) == 2 else predicted.shape[0]
             if padding:
                 # Add padding areas to align with input indexes
-                preds = torch.zeros(
-                    (input_batch_size, out_channels, h_img + (2 * delta), w_img + (2 * delta))
-                )
+                preds = torch.zeros((input_batch_size, out_channels, h_img + (2 * delta), w_img + (2 * delta)))
                 preds_count = torch.zeros(input_batch_size, h_img + (2 * delta), w_img + (2 * delta))
             else:
                 preds = torch.zeros((input_batch_size, out_channels, h_img, w_img))
@@ -369,6 +371,7 @@ def generate_tiled_inference_output(outputs,
         output = output / preds_count.unsqueeze(1)
 
     return output
+
 
 def tiled_inference(
     model_forward: Callable,
@@ -416,20 +419,22 @@ def tiled_inference(
         torch.Tensor: The result of the inference
     """
 
-    coordinates_and_inputs, tensor_reshape, input_batch_size, h_img, w_img, device, delta = prepare_tiled_inference_input(
-        input_batch=input_batch,
-        out_channels=out_channels,
-        inference_parameters=inference_parameters,
-        crop=crop,
-        stride=stride,
-        delta=delta,
-        h_crop=h_crop,
-        w_crop=w_crop,
-        h_stride=h_stride,
-        w_stride=w_stride,
-        blend_overlaps=blend_overlaps,
-        padding=padding,
-        device=device,
+    coordinates_and_inputs, tensor_reshape, input_batch_size, h_img, w_img, device, delta = (
+        prepare_tiled_inference_input(
+            input_batch=input_batch,
+            out_channels=out_channels,
+            inference_parameters=inference_parameters,
+            crop=crop,
+            stride=stride,
+            delta=delta,
+            h_crop=h_crop,
+            w_crop=w_crop,
+            h_stride=h_stride,
+            w_stride=w_stride,
+            blend_overlaps=blend_overlaps,
+            padding=padding,
+            device=device,
+        )
     )
 
     outputs: list[tuple[InferenceInput, torch.Tensor]] = []

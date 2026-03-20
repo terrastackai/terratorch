@@ -12,30 +12,29 @@ import rioxarray
 import torch
 from matplotlib.colors import Normalize
 from torch import Tensor
+from torchgeo.datasets import NonGeoDataset
 from xarray import DataArray
 
 from terratorch.datasets.utils import default_transform, validate_bands
-from torchgeo.datasets import NonGeoDataset
 
 
 class BurnIntensityNonGeo(NonGeoDataset):
     """Dataset implementation for [Burn Intensity classification](https://huggingface.co/datasets/ibm-nasa-geospatial/burn_intensity)."""
 
     all_band_names = (
-        "BLUE", "GREEN", "RED", "NIR", "SWIR_1", "SWIR_2",
+        "BLUE",
+        "GREEN",
+        "RED",
+        "NIR",
+        "SWIR_1",
+        "SWIR_2",
     )
 
     rgb_bands = ("RED", "GREEN", "BLUE")
 
     BAND_SETS = {"all": all_band_names, "rgb": rgb_bands}
 
-    class_names = (
-        "No burn",
-        "Unburned to Very Low",
-        "Low Severity",
-        "Moderate Severity",
-        "High Severity"
-    )
+    class_names = ("No burn", "Unburned to Very Low", "Low Severity", "Moderate Severity", "High Severity")
 
     CSV_FILES = {
         "limited": "BS_files_with_less_than_25_percent_zeros.csv",
@@ -102,11 +101,13 @@ class BurnIntensityNonGeo(NonGeoDataset):
                 image_files.append(str(image_file))
             mask_filename = image_filename.replace("HLS_", "BS_")
             mask_file = self.data_root / "pre" / mask_filename
-            self.samples.append({
-                "image_files": image_files,
-                "mask_file": str(mask_file),
-                "casename": self._extract_casename(image_filename),
-            })
+            self.samples.append(
+                {
+                    "image_files": image_files,
+                    "mask_file": str(mask_file),
+                    "casename": self._extract_casename(image_filename),
+                }
+            )
 
         self.use_metadata = use_metadata
         self.no_data_replace = no_data_replace
@@ -163,7 +164,7 @@ class BurnIntensityNonGeo(NonGeoDataset):
 
         output = {
             "image": images.astype(np.float32),
-            "mask": self._load_file(Path(mask_file), nan_replace=self.no_label_replace).to_numpy()[0]
+            "mask": self._load_file(Path(mask_file), nan_replace=self.no_label_replace).to_numpy()[0],
         }
 
         if self.transform:
@@ -180,7 +181,6 @@ class BurnIntensityNonGeo(NonGeoDataset):
         if nan_replace is not None:
             data = data.fillna(nan_replace)
         return data
-
 
     def plot(self, sample: dict[str, Tensor], suptitle: str | None = None) -> Any:
         """Plot a sample from the dataset.
@@ -236,10 +236,7 @@ class BurnIntensityNonGeo(NonGeoDataset):
         class_names = sample.get("class_names", self.class_names)
         positions = np.linspace(0, 1, num_classes) if num_classes > 1 else [0.5]
 
-        legend_handles = [
-            mpatches.Patch(color=cmap(pos), label=class_names[i])
-            for i, pos in enumerate(positions)
-        ]
+        legend_handles = [mpatches.Patch(color=cmap(pos), label=class_names[i]) for i, pos in enumerate(positions)]
         ax[legend_ax_index].legend(handles=legend_handles, loc="center")
         ax[legend_ax_index].axis("off")
 

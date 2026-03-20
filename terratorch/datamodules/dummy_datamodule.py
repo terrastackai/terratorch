@@ -2,21 +2,22 @@
 Dummy Data Module for Testing
 Generates random data on-the-fly without requiring actual data files.
 """
-import torch
-from torch.utils.data import Dataset, DataLoader
+
 import lightning.pytorch as pl
+import torch
+from torch.utils.data import DataLoader, Dataset
 
 
 class DummyDataset(Dataset):
     """
     Dataset that generates random images and masks on-the-fly.
-    
+
     Returns dict with keys:
         - "image": Random tensor of shape (channels, height, width)
         - "mask": Random tensor of shape (height, width) for regression
                   or (height, width) with integer values for segmentation
     """
-    
+
     def __init__(
         self,
         num_samples: int = 100,
@@ -53,15 +54,15 @@ class DummyDataset(Dataset):
         self.mask_std = mask_std
         self.segmentation = segmentation
         self.num_classes = num_classes
-    
+
     def __len__(self):
         return self.num_samples
-    
+
     def __getitem__(self, idx):
         # Generate random image (channels, height, width)
         image = torch.randn(self.channels, self.height, self.width)
         image = image * self.image_std + self.image_mean
-        
+
         # Generate random mask (height, width)
         if self.segmentation:
             # For segmentation: random class labels
@@ -70,24 +71,21 @@ class DummyDataset(Dataset):
             # For regression: random continuous values
             mask = torch.randn(self.height, self.width)
             mask = mask * self.mask_std + self.mask_mean
-        
-        return {
-            "image": image,
-            "mask": mask
-        }
-    
-    def plot(dummy_sample,dummy_mask):
+
+        return {"image": image, "mask": mask}
+
+    def plot(dummy_sample, dummy_mask):
         None
 
 
 class DummyDataModule(pl.LightningDataModule):
     """
     Lightning DataModule that provides random data for testing.
-    
+
     Perfect for testing custom modules without needing actual data files.
     Generates data on-the-fly with configurable dimensions and properties.
     """
-    
+
     def __init__(
         self,
         batch_size: int = 4,
@@ -137,7 +135,7 @@ class DummyDataModule(pl.LightningDataModule):
         self.mask_std = mask_std
         self.segmentation = segmentation
         self.num_classes = num_classes
-    
+
     def setup(self, stage=None):
         """Setup datasets for each stage."""
         dataset_kwargs = {
@@ -151,23 +149,14 @@ class DummyDataModule(pl.LightningDataModule):
             "segmentation": self.segmentation,
             "num_classes": self.num_classes,
         }
-        
+
         if stage == "fit" or stage is None:
-            self.train_dataset = DummyDataset(
-                num_samples=self.train_samples,
-                **dataset_kwargs
-            )
-            self.val_dataset = DummyDataset(
-                num_samples=self.val_samples,
-                **dataset_kwargs
-            )
-        
+            self.train_dataset = DummyDataset(num_samples=self.train_samples, **dataset_kwargs)
+            self.val_dataset = DummyDataset(num_samples=self.val_samples, **dataset_kwargs)
+
         if stage == "test" or stage is None:
-            self.test_dataset = DummyDataset(
-                num_samples=self.test_samples,
-                **dataset_kwargs
-            )
-    
+            self.test_dataset = DummyDataset(num_samples=self.test_samples, **dataset_kwargs)
+
     def train_dataloader(self):
         """Return training dataloader."""
         return DataLoader(
@@ -176,7 +165,7 @@ class DummyDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             shuffle=True,
         )
-    
+
     def val_dataloader(self):
         """Return validation dataloader."""
         return DataLoader(
@@ -185,7 +174,7 @@ class DummyDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             shuffle=False,
         )
-    
+
     def test_dataloader(self):
         """Return test dataloader."""
         return DataLoader(

@@ -15,25 +15,26 @@
 import math
 import random
 import warnings
-import torch
-from torch import nn
 from functools import partial
 
+import torch
+from torch import nn
+
 from .encoder_embeddings import ImageEncoderEmbedding, ImageTokenEncoderEmbedding
-from .tm_utils import Block, LayerNorm
 from .generate import (
     GenerationSampler,
     build_chained_generation_schedules,
-    init_full_input_modality,
     init_empty_target_modality,
+    init_full_input_modality,
 )
+from .modality_info import MODALITY_INFO
 from .terramind import (
     TerraMind,
     build_modality_embeddings,
     build_output_modality_embeddings,
     build_tokenizer,
 )
-from .modality_info import MODALITY_INFO
+from .tm_utils import Block, LayerNorm
 
 
 def build_tim_modality_embeddings(modalities, tim_modalities, img_size=None, dim=None, patch_size=None):
@@ -41,47 +42,50 @@ def build_tim_modality_embeddings(modalities, tim_modalities, img_size=None, dim
 
     for modality in tim_modalities:
         # Cover multiple naming conventions
-        modality_renamed = (modality.lower()
-                            .replace('s2', 'sen2')
-                            .replace('s1', 'sen1')
-                            .replace('text', 'caption')
-                            .replace('location', 'coords')
-                            )
+        modality_renamed = (
+            modality.lower()
+            .replace("s2", "sen2")
+            .replace("s1", "sen1")
+            .replace("text", "caption")
+            .replace("location", "coords")
+        )
 
         # Get modality key in MODALITY_INFO
         if modality in MODALITY_INFO.keys():
             key = modality
-        elif 'sen2' in modality_renamed:
-            key = 'tok_sen2l2a@224'
-        elif 'sen1rtc' in modality_renamed:
-            key = 'tok_sen1rtc@224'
-        elif 'sen1' in modality_renamed:  # Default to S1GRD if not specified
-            key = 'tok_sen1grd@224'
-        elif 'dem' in modality_renamed:
-            key = 'tok_dem@224'
-        elif 'lulc' in modality_renamed:
-            key = 'tok_lulc@224'
-        elif 'ndvi' in modality_renamed:
-            key = 'tok_ndvi@224'
-        elif 'caption' in modality_renamed:
-            key = 'caption'
-        elif 'coords' in modality_renamed:
-            key = 'coords'
+        elif "sen2" in modality_renamed:
+            key = "tok_sen2l2a@224"
+        elif "sen1rtc" in modality_renamed:
+            key = "tok_sen1rtc@224"
+        elif "sen1" in modality_renamed:  # Default to S1GRD if not specified
+            key = "tok_sen1grd@224"
+        elif "dem" in modality_renamed:
+            key = "tok_dem@224"
+        elif "lulc" in modality_renamed:
+            key = "tok_lulc@224"
+        elif "ndvi" in modality_renamed:
+            key = "tok_ndvi@224"
+        elif "caption" in modality_renamed:
+            key = "caption"
+        elif "coords" in modality_renamed:
+            key = "coords"
         else:
-            raise NotImplementedError(f'Could not find modality {modality} in default modality info.')
+            raise NotImplementedError(f"Could not find modality {modality} in default modality info.")
 
         if modality in mod_name_mapping:
             # Modality is defined for input and TiM
             if key != mod_name_mapping[modality]:
-                raise NotImplementedError(f'Fallback TiM modalities are currently only supported for tokenized '
-                                          f'modalities, found {modality} ({mod_name_mapping[modality]}).')
+                raise NotImplementedError(
+                    f"Fallback TiM modalities are currently only supported for tokenized "
+                    f"modalities, found {modality} ({mod_name_mapping[modality]})."
+                )
                 # TODO: Handle TiM modalities based on missing modalities in the input.
                 #  E.g., if untok S2 input is missing, predict tok S2.
             continue
 
         mod_name_mapping[modality] = key  # Requires manual mapping for loading model weights
         mod_info = MODALITY_INFO[key]
-        mod_embeddings[key] = mod_info['encoder_embedding'](image_size=img_size, dim_tokens=dim, **mod_info)
+        mod_embeddings[key] = mod_info["encoder_embedding"](image_size=img_size, dim_tokens=dim, **mod_info)
 
     return mod_embeddings, mod_name_mapping
 
@@ -129,48 +133,48 @@ class TerraMindTiM(nn.Module):
     """
 
     def __init__(
-            self,
-            img_size: int = 224,
-            modalities: list[str] | dict[str, int | nn.Module] | None = None,
-            tim_modalities: list[str] | None = None,
-            tim_chained_generations: bool = True,
-            tim_decoding_steps: int = 1,
-            tim_temps: float = 1.0,
-            tim_top_p: float = 0.8,
-            tim_top_k: int = 0,
-            merge_method: str | None = 'mean',
-            patch_size: int = 16,
-            in_chans: int = 3,
-            dim: int = 768,
-            encoder_depth: int = 12,
-            decoder_depth: int = 12,
-            num_heads: int = 12,
-            mlp_ratio: float = 4.0,
-            qkv_bias: bool = True,
-            proj_bias: bool = True,
-            mlp_bias: bool = True,
-            num_register_tokens: int = 0,
-            drop_path_rate: float = 0.0,
-            drop_rate: float = 0.0,
-            attn_drop_rate: float = 0.0,
-            modality_drop_rate: float = 0.0,
-            act_layer: nn.Module = nn.GELU,
-            norm_layer: partial | nn.Module = partial(LayerNorm, eps=1e-6),
-            gated_mlp: bool = False,  # Make the feedforward gated for e.g. SwiGLU
-            qk_norm: bool = False,
-            encoder_norm: bool = True,
-            tokenizer_dict: dict | None = None,
-            pretrained: bool = False,
+        self,
+        img_size: int = 224,
+        modalities: list[str] | dict[str, int | nn.Module] | None = None,
+        tim_modalities: list[str] | None = None,
+        tim_chained_generations: bool = True,
+        tim_decoding_steps: int = 1,
+        tim_temps: float = 1.0,
+        tim_top_p: float = 0.8,
+        tim_top_k: int = 0,
+        merge_method: str | None = "mean",
+        patch_size: int = 16,
+        in_chans: int = 3,
+        dim: int = 768,
+        encoder_depth: int = 12,
+        decoder_depth: int = 12,
+        num_heads: int = 12,
+        mlp_ratio: float = 4.0,
+        qkv_bias: bool = True,
+        proj_bias: bool = True,
+        mlp_bias: bool = True,
+        num_register_tokens: int = 0,
+        drop_path_rate: float = 0.0,
+        drop_rate: float = 0.0,
+        attn_drop_rate: float = 0.0,
+        modality_drop_rate: float = 0.0,
+        act_layer: nn.Module = nn.GELU,
+        norm_layer: partial | nn.Module = partial(LayerNorm, eps=1e-6),
+        gated_mlp: bool = False,  # Make the feedforward gated for e.g. SwiGLU
+        qk_norm: bool = False,
+        encoder_norm: bool = True,
+        tokenizer_dict: dict | None = None,
+        pretrained: bool = False,
     ):
         super().__init__()
 
         if modalities is None or len(modalities) == 0:
             # Init new image modality
-            modalities = [{'image': in_chans}]
+            modalities = [{"image": in_chans}]
         elif isinstance(modalities, dict):
             modalities = [modalities]
         elif not isinstance(modalities, list):
-            raise ValueError(f'Modalities must be None, a list of modality keys or a dict with ints/embedding layers.')
+            raise ValueError("Modalities must be None, a list of modality keys or a dict with ints/embedding layers.")
 
         self.tim_modalities = tim_modalities or ["LULC"]
         self.tim_decoding_steps = tim_decoding_steps
@@ -180,16 +184,19 @@ class TerraMindTiM(nn.Module):
 
         # Build embedding layers for encoder (modalities and tim_modalities as inputs)
         mod_embeddings, mod_name_mapping = build_tim_modality_embeddings(
-            modalities, self.tim_modalities, img_size=img_size, dim=dim, patch_size=patch_size)
+            modalities, self.tim_modalities, img_size=img_size, dim=dim, patch_size=patch_size
+        )
 
         # Init embeddings for TiM model
         if tim_chained_generations:
             tim_encoder_embeddings = mod_embeddings
         else:
             tim_encoder_embeddings, _ = build_modality_embeddings(
-                MODALITY_INFO, modalities, img_size=img_size, dim=dim, patch_size=patch_size)
+                MODALITY_INFO, modalities, img_size=img_size, dim=dim, patch_size=patch_size
+            )
         tim_decoder_embeddings, tim_decoder_name_mapping = build_output_modality_embeddings(
-            MODALITY_INFO, self.tim_modalities, img_size=img_size, dim=dim, patch_size=patch_size)
+            MODALITY_INFO, self.tim_modalities, img_size=img_size, dim=dim, patch_size=patch_size
+        )
 
         self.encoder_embeddings = nn.ModuleDict(mod_embeddings)
         self.mod_name_mapping = mod_name_mapping
@@ -223,27 +230,43 @@ class TerraMindTiM(nn.Module):
 
         self.img_size = img_size
         self.merge_method = merge_method
-        self.image_modalities = [key for key, value in self.encoder_embeddings.items()
-                                 if isinstance(value, ImageEncoderEmbedding)
-                                 or isinstance(value, ImageTokenEncoderEmbedding)]
+        self.image_modalities = [
+            key
+            for key, value in self.encoder_embeddings.items()
+            if isinstance(value, ImageEncoderEmbedding) or isinstance(value, ImageTokenEncoderEmbedding)
+        ]
         self.modality_drop_rate = modality_drop_rate
         assert 0 <= self.modality_drop_rate <= 1, "modality_drop_rate must be in [0, 1]"
         # New learned parameter for handling missing modalities
-        if self.merge_method == 'concat':
+        if self.merge_method == "concat":
             self.missing_mod_token = nn.Parameter(torch.Tensor(dim))
 
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, encoder_depth)]
 
-        self.encoder = nn.ModuleList([
-            Block(dim=dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, proj_bias=proj_bias,
-                  mlp_bias=mlp_bias, drop_path=dpr[i], drop=drop_rate, attn_drop=attn_drop_rate, act_layer=act_layer,
-                  norm_layer=norm_layer, gated_mlp=gated_mlp, qk_norm=qk_norm)
-            for i in range(encoder_depth)
-        ])
+        self.encoder = nn.ModuleList(
+            [
+                Block(
+                    dim=dim,
+                    num_heads=num_heads,
+                    mlp_ratio=mlp_ratio,
+                    qkv_bias=qkv_bias,
+                    proj_bias=proj_bias,
+                    mlp_bias=mlp_bias,
+                    drop_path=dpr[i],
+                    drop=drop_rate,
+                    attn_drop=attn_drop_rate,
+                    act_layer=act_layer,
+                    norm_layer=norm_layer,
+                    gated_mlp=gated_mlp,
+                    qk_norm=qk_norm,
+                )
+                for i in range(encoder_depth)
+            ]
+        )
 
         # Needed for terratorch decoders
-        if merge_method == 'concat':
+        if merge_method == "concat":
             self.out_channels = [dim * len(self.image_modalities) for i in range(encoder_depth)]
         else:
             self.out_channels = [dim for i in range(encoder_depth)]
@@ -259,9 +282,11 @@ class TerraMindTiM(nn.Module):
             self.register_tokens = None
 
         if tokenizer_dict is not None:
-            self.tokenizer = build_tokenizer(tokenizer_dict=tokenizer_dict,
-                                             input_modalities=list(self.encoder_embeddings.keys()),
-                                             pretrained=pretrained)
+            self.tokenizer = build_tokenizer(
+                tokenizer_dict=tokenizer_dict,
+                input_modalities=list(self.encoder_embeddings.keys()),
+                pretrained=pretrained,
+            )
         else:
             self.tokenizer = {}
 
@@ -277,13 +302,13 @@ class TerraMindTiM(nn.Module):
                 continue
             # Linear
             elif isinstance(m, nn.Linear):
-                if 'qkv' in name:
+                if "qkv" in name:
                     # treat the weights of Q, K, V separately
-                    val = math.sqrt(6. / float(m.weight.shape[0] // 3 + m.weight.shape[1]))
+                    val = math.sqrt(6.0 / float(m.weight.shape[0] // 3 + m.weight.shape[1]))
                     nn.init.uniform_(m.weight, -val, val)
-                elif 'kv' in name:
+                elif "kv" in name:
                     # treat the weights of K, V separately
-                    val = math.sqrt(6. / float(m.weight.shape[0] // 2 + m.weight.shape[1]))
+                    val = math.sqrt(6.0 / float(m.weight.shape[0] // 2 + m.weight.shape[1]))
                     nn.init.uniform_(m.weight, -val, val)
                 else:
                     nn.init.xavier_uniform_(m.weight)
@@ -299,7 +324,7 @@ class TerraMindTiM(nn.Module):
                 nn.init.normal_(m.weight, std=0.02)
             # Conv2d
             elif isinstance(m, nn.Conv2d):
-                if '.proj' in name:
+                if ".proj" in name:
                     # From MAE, initialize projection like nn.Linear (instead of nn.Conv2d)
                     w = m.weight.data
                     nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
@@ -309,9 +334,9 @@ class TerraMindTiM(nn.Module):
         no_wd_set = set()
 
         for mod, emb_module in self.encoder_embeddings.items():
-            if hasattr(emb_module, 'no_weight_decay'):
+            if hasattr(emb_module, "no_weight_decay"):
                 to_skip = emb_module.no_weight_decay()
-                to_skip = set([f'encoder_embeddings.{mod}.{name}' for name in to_skip])
+                to_skip = set([f"encoder_embeddings.{mod}.{name}" for name in to_skip])
                 no_wd_set = no_wd_set | to_skip
 
         return no_wd_set
@@ -385,12 +410,9 @@ class TerraMindTiM(nn.Module):
 
             # Encode input and provide expected format
             tim_dict[self.mod_name_mapping[mod]] = init_full_input_modality(
-                value,
-                MODALITY_INFO,
-                self.mod_name_mapping[mod],
-                device
+                value, MODALITY_INFO, self.mod_name_mapping[mod], device
             )
-        
+
         # Initialize TiM modalities
         target_domains = []
         tokens_per_target = []
@@ -416,7 +438,8 @@ class TerraMindTiM(nn.Module):
             tokens_per_target.append(mod_num_tokens)
             target_domains.append(self.mod_name_mapping[mod])
             tim_dict[self.mod_name_mapping[mod]] = init_empty_target_modality(
-                MODALITY_INFO, self.mod_name_mapping[mod], batch_size, mod_num_tokens, device)
+                MODALITY_INFO, self.mod_name_mapping[mod], batch_size, mod_num_tokens, device
+            )
         num_tim_mod = len(target_domains)
 
         # Predict tokens for TiM modalities
@@ -443,12 +466,12 @@ class TerraMindTiM(nn.Module):
                 top_p=self.tim_top_p,
                 top_k=self.tim_top_k,
                 num_tokens=sum(tokens_per_target),
-                tokenizer=self.tokenizer
+                tokenizer=self.tokenizer,
             )
 
         # Add TiM outputs to input dict
         for mod in target_domains:
-            d[self.output_mod_name_mapping[mod]] = out_dict[mod]['tensor']
+            d[self.output_mod_name_mapping[mod]] = out_dict[mod]["tensor"]
 
         if self.training and self.modality_drop_rate:
             # Drop random modalities during training
@@ -462,8 +485,8 @@ class TerraMindTiM(nn.Module):
         for mod, tensor in d.items():
             mod_dict = self.encoder_embeddings[self.mod_name_mapping[mod]](tensor)
             # Add embeddings to patchified data
-            x.append(mod_dict['x'] + mod_dict['emb'])
-            num_tokens.append(mod_dict['x'].shape[-2])
+            x.append(mod_dict["x"] + mod_dict["emb"])
+            num_tokens.append(mod_dict["x"].shape[-2])
             image_mod.append(self.mod_name_mapping[mod] in self.image_modalities)
 
         # Concatenate along token dim
@@ -473,7 +496,7 @@ class TerraMindTiM(nn.Module):
             register_tokens = self.register_tokens.repeat((x.shape[0], 1, 1))
             # We add register tokens at the beginning of the sequence
             x = torch.cat([register_tokens, x], dim=1)
-            if self.merge_method == 'dict':
+            if self.merge_method == "dict":
                 # Return register tokens as additional modality
                 d_mod.insert(0, "register_tokens")
                 num_tokens.insert(0, self.num_register_tokens)
@@ -488,22 +511,22 @@ class TerraMindTiM(nn.Module):
         def _unstack_image_modalities(x):
             if self.num_register_tokens:
                 # Remove register tokens
-                x = x[:, self.num_register_tokens:]
+                x = x[:, self.num_register_tokens :]
             x = torch.split(x, num_tokens, dim=1)  # Split tokens by modality
             x = [m for m, keep in zip(x, image_mod) if keep]  # Drop sequence modalities
             x = torch.stack(x, dim=1)  # (B, M, N, D)
             return x
 
         # Merge tokens from different modalities
-        if self.merge_method == 'mean':
+        if self.merge_method == "mean":
             out = [_unstack_image_modalities(x) for x in out]
             out = [x.mean(dim=1) for x in out]
 
-        elif self.merge_method == 'max':
+        elif self.merge_method == "max":
             out = [_unstack_image_modalities(x) for x in out]
             out = [x.max(dim=1)[0] for x in out]
 
-        elif self.merge_method == 'concat':
+        elif self.merge_method == "concat":
             out = [_unstack_image_modalities(x) for x in out]
             if len(d) < len(self.image_modalities):
                 # Handle missing modalities with missing_mod_token
@@ -513,14 +536,15 @@ class TerraMindTiM(nn.Module):
             # Concat along embedding dim
             out = [torch.cat(x.unbind(dim=1), dim=-1) for x in out]
 
-        elif self.merge_method == 'dict':
+        elif self.merge_method == "dict":
             out = [torch.split(x, num_tokens, dim=1) for x in out]
             out = [{mod: x[i] for i, mod in enumerate(d_mod)} for x in out]
 
         elif self.merge_method is None:
             pass  # Do nothing
         else:
-            raise NotImplementedError(f'Merging method {self.merge_method} is not implemented. '
-                                      f'Select one of mean, max or concat.')
+            raise NotImplementedError(
+                f"Merging method {self.merge_method} is not implemented. Select one of mean, max or concat."
+            )
 
         return out

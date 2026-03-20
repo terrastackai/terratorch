@@ -1,19 +1,19 @@
-import os
 import logging
+import os
 from collections.abc import Iterable
-import numpy as np
-import torch 
-import pandas as pd
+
 import lightning
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import torch
 from lightning.pytorch.callbacks import Callback
-from torchgeo.trainers import BaseTask
 from torchgeo.datasets.utils import unbind_samples
+from torchgeo.trainers import BaseTask
 
-from terratorch.models.model import Model
+from terratorch.models.model import Model, ModelOutput
 from terratorch.tasks.optimizer_factory import optimizer_factory
 from terratorch.tasks.tiled_inference import tiled_inference
-from terratorch.models.model import ModelOutput
 
 BATCH_IDX_FOR_VALIDATION_PLOTTING = 10
 logger = logging.getLogger("terratorch")
@@ -26,12 +26,13 @@ class TerraTorchTask(BaseTask):
     """
 
     def __init__(
-        self, 
-        task: str | None = None, 
-        tiled_inference_on_testing: bool = False, 
+        self,
+        task: str | None = None,
+        tiled_inference_on_testing: bool = False,
         tiled_inference_on_validation: bool = False,
         plot_on_val: bool | int = False,
-        path_to_record_metrics: str = False):
+        path_to_record_metrics: str = False,
+    ):
 
         self.task = task
         self.tiled_inference_on_testing = tiled_inference_on_testing
@@ -52,9 +53,7 @@ class TerraTorchTask(BaseTask):
             # Skipping model factory because custom model is provided
             return
 
-        self.model: Model = self.model_factory.build_model(
-            self.task, aux_decoders=self.aux_heads, **self.model_args
-        )
+        self.model: Model = self.model_factory.build_model(self.task, aux_decoders=self.aux_heads, **self.model_args)
 
         if self.hparams["freeze_backbone"]:
             if self.hparams.get("peft_config", None) is not None:
@@ -68,18 +67,14 @@ class TerraTorchTask(BaseTask):
         if self.hparams.get("freeze_head", None):
             self.model.freeze_head()
 
-    def handle_full_or_tiled_inference(
-        self, 
-        x, 
-        use_tiled_inference:bool=False, 
-        **rest):
+    def handle_full_or_tiled_inference(self, x, use_tiled_inference: bool = False, **rest):
 
         # When the input sample cannot be fit on memory for some reason
         # the tiled inference is automatically invoked.
-        def model_forward(x,  **kwargs):
+        def model_forward(x, **kwargs):
             return self(x, **kwargs).output
 
-        # The kind of memory device we are considering 
+        # The kind of memory device we are considering
         if torch.cuda.is_available():
             device = "GPU Memory"
         else:
@@ -90,8 +85,10 @@ class TerraTorchTask(BaseTask):
             # as `True` in the config, we will try to use full inference.
             try:
                 model_output: ModelOutput = self(x, **rest)
-            except (torch.OutOfMemoryError, MemoryError)  as e:
-                raise Exception(f"Inference on testing failed due to insufficient {device}. Try to pass `tiled_inference_on_testing` or `tiled_inference_on_validation` as `True`, to use tiled inference for it.")
+            except (torch.OutOfMemoryError, MemoryError):
+                raise Exception(
+                    f"Inference on testing failed due to insufficient {device}. Try to pass `tiled_inference_on_testing` or `tiled_inference_on_validation` as `True`, to use tiled inference for it."
+                )
 
         else:
             logger.debug("Running tiled inference.")
@@ -109,8 +106,10 @@ class TerraTorchTask(BaseTask):
                         **rest,
                     )
                     model_output = ModelOutput(output=y_hat)
-                except (torch.OutOfMemoryError, MemoryError) as e:
-                    raise Exception("It seems your tiled inference configuration is insufficient. Try to reduce the tile sizes.")
+                except (torch.OutOfMemoryError, MemoryError):
+                    raise Exception(
+                        "It seems your tiled inference configuration is insufficient. Try to reduce the tile sizes."
+                    )
             else:
                 raise Exception("You need to define a configuration for the tiled inference.")
 
@@ -171,9 +170,11 @@ class TerraTorchTask(BaseTask):
             and self.logger
             and not self.current_epoch % self.plot_on_val  # will be True every self.plot_on_val epochs
             and hasattr(self.logger, "experiment")
-            and (hasattr(self.logger.experiment, "add_figure") or
-                 hasattr(self.logger.experiment, "log_figure") or
-                 hasattr(self.logger.experiment, "log"))
+            and (
+                hasattr(self.logger.experiment, "add_figure")
+                or hasattr(self.logger.experiment, "log_figure")
+                or hasattr(self.logger.experiment, "log")
+            )
         )
 
     def plot_sample(self, batch, batch_idx):
@@ -193,8 +194,11 @@ class TerraTorchTask(BaseTask):
 
             sample = unbind_samples(batch)[0]
             datamodule = self.trainer.datamodule
-            fig = datamodule.val_dataset.plot(sample) if hasattr(datamodule.val_dataset, "plot") else datamodule.plot(
-                sample, "val")
+            fig = (
+                datamodule.val_dataset.plot(sample)
+                if hasattr(datamodule.val_dataset, "plot")
+                else datamodule.plot(sample, "val")
+            )
             if fig:
                 summary_writer = self.logger.experiment
                 caption = batch.get("filename", batch_idx)
@@ -202,17 +206,14 @@ class TerraTorchTask(BaseTask):
                     caption = list(caption.values())[0]
                 if isinstance(caption, list):
                     caption = caption[0]
-                caption = str(caption).rsplit('.')[0]
+                caption = str(caption).rsplit(".")[0]
                 if hasattr(summary_writer, "add_figure"):
                     summary_writer.add_figure(f"image/{caption}", fig, global_step=self.global_step)
                 elif hasattr(summary_writer, "log_figure"):
-                    summary_writer.log_figure(
-                        self.logger.run_id, fig, f"epoch_{self.current_epoch}_{batch_idx}.png"
-                    )
+                    summary_writer.log_figure(self.logger.run_id, fig, f"epoch_{self.current_epoch}_{batch_idx}.png")
                 elif hasattr(self.logger, "log_image"):
                     # Log image to WandB
-                    self.logger.log_image(key="samples", images=[fig],
-                                          caption=[f"step{self.global_step}_{caption}"])
+                    self.logger.log_image(key="samples", images=[fig], caption=[f"step{self.global_step}_{caption}"])
         except ValueError:
             pass
         finally:
@@ -223,7 +224,7 @@ class TerraTorchTask(BaseTask):
         if self.path_to_record_metrics:
             # Recording the metrics
             metrics_record_ = self.test_metrics[dataloader_idx](y_hat_hard, y)
-            metrics_record_dict = {k: float(np.array(v.detach().cpu())) for k,v in metrics_record_.items()} 
+            metrics_record_dict = {k: float(np.array(v.detach().cpu())) for k, v in metrics_record_.items()}
             metrics_record_list = [{"Metric": k, "Value": v} for k, v in metrics_record_dict.items()]
             metrics_record = pd.DataFrame(data=metrics_record_list)
 

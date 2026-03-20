@@ -1,12 +1,15 @@
 import importlib
-from torch import nn
 from typing import Any, Dict
+
+from torch import nn
+
 
 def get_module_and_class(path: str) -> (str, str):
     """Splits a dotted path string into module and class name."""
-    class_name = path.split(".")[-1]
+    class_name = path.rsplit(".", maxsplit=1)[-1]
     module_name = path.replace("." + class_name, "")
     return module_name, class_name
+
 
 def _instantiate_from_path(dotted_path: str, **kwargs: Any) -> Any:
     """
@@ -20,21 +23,22 @@ def _instantiate_from_path(dotted_path: str, **kwargs: Any) -> Any:
         An instance of the specified class.
     """
     module_name, class_name = get_module_and_class(dotted_path)
-    
+
     # Import the module
     try:
         module = importlib.import_module(module_name)
     except ImportError as e:
         raise ImportError(f"Could not import module '{module_name}' from path '{dotted_path}'") from e
-        
+
     # Get the class from the module
     try:
         class_ = getattr(module, class_name)
     except AttributeError as e:
         raise AttributeError(f"Module '{module_name}' has no class named '{class_name}'") from e
-        
+
     # Instantiate and return the class
     return class_(**kwargs)
+
 
 def bounds_from_transform(transform, width: int, height: int) -> tuple[float, float, float, float]:
     """
@@ -50,6 +54,7 @@ def bounds_from_transform(transform, width: int, height: int) -> tuple[float, fl
     bottom, top = min(ys), max(ys)
 
     return left, bottom, right, top
+
 
 def infer_transform_and_bounds(
     center_y: float,

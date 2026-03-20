@@ -23,6 +23,7 @@ SUPPORTED_TASKS = PIXEL_WISE_TASKS + SCALAR_TASKS
 class PrithviModelFactory(ModelFactory):
     def __init__(self) -> None:
         self._factory: EncoderDecoderFactory = EncoderDecoderFactory()
+
     def build_model(
         self,
         task: str,
@@ -81,24 +82,22 @@ class PrithviModelFactory(ModelFactory):
         kwargs["backbone_pretrained"] = pretrained
         kwargs["backbone_num_frames"] = num_frames
         if prepare_features_for_image_model:
-            msg = (
-                "This functionality is no longer supported. Please migrate to EncoderDecoderFactory\
+            msg = "This functionality is no longer supported. Please migrate to EncoderDecoderFactory\
                          and use necks."
-            )
             raise RuntimeError(msg)
-
 
         if not isinstance(backbone, nn.Module):
             if not backbone.startswith("prithvi_"):
                 msg = "This class only handles models for `prithvi` encoders"
                 raise NotImplementedError(msg)
 
-        return self._factory.build_model(task,
-                                         backbone,
-                                         decoder,
-                                         num_classes=num_classes,
-                                         necks=None,
-                                         aux_decoders=aux_decoders,
-                                         rescale=rescale,
-                                         **kwargs)
-
+        return self._factory.build_model(
+            task,
+            backbone,
+            decoder,
+            num_classes=num_classes,
+            necks=None,
+            aux_decoders=aux_decoders,
+            rescale=rescale,
+            **kwargs,
+        )

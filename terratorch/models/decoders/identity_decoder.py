@@ -1,7 +1,6 @@
 # Copyright contributors to the Terratorch project
 
-"""Pass the features straight through
-"""
+"""Pass the features straight through"""
 
 from torch import Tensor, nn
 

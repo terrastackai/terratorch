@@ -1,10 +1,10 @@
 from typing import Any
 
 import albumentations as A  # noqa: N812
+from torchgeo.datamodules import NonGeoDataModule
 
 from terratorch.datamodules.utils import wrap_in_compose_is_list
 from terratorch.datasets import Sen4AgriNet
-from torchgeo.datamodules import NonGeoDataModule
 
 
 class Sen4AgriNetDataModule(NonGeoDataModule):

@@ -1,41 +1,43 @@
 # Copyright contributors to the Terratorch project
 
+from typing import Dict, Union
+
+import albumentations as A
+import kornia.augmentation as K
+import numpy as np
 import torch
 import torch.nn.functional as F
 from albumentations import BasicTransform, Compose, ImageOnlyTransform
 from einops import rearrange
-import albumentations as A
-import kornia.augmentation as K
 from kornia.augmentation._2d.geometric.base import GeometricAugmentationBase2D
 from torch import nn
-from typing import Union, Dict
-import numpy as np
 
 N_DIMS_FOR_TEMPORAL = 4
 N_DIMS_FLATTENED_TEMPORAL = 3
 
-def kornia_augmentations_to_callable_with_dict(augmentations: list[Union[GeometricAugmentationBase2D, K.VideoSequential]]  | None = None):
+
+def kornia_augmentations_to_callable_with_dict(
+    augmentations: list[GeometricAugmentationBase2D | K.VideoSequential] | None = None,
+):
     if augmentations is None:
         return lambda x: x
-    #if first augmentiaion is VideoSequential (multi-temporal), add the rest to video sequence 
+    # if first augmentiaion is VideoSequential (multi-temporal), add the rest to video sequence
     if isinstance(augmentations[0], K.VideoSequential):
         augmentations = K.AugmentationSequential(
-            K.VideoSequential(
-                *augmentations[1:],
-                data_format="BCTHW",
-                same_on_frame=True
-                ),
-                data_keys=None,
-                keepdim=True,
-            )
+            K.VideoSequential(*augmentations[1:], data_format="BCTHW", same_on_frame=True),
+            data_keys=None,
+            keepdim=True,
+        )
     else:
         augmentations = K.AugmentationSequential(
             *augmentations,
             data_keys=None,
             keepdim=True,
-            )
+        )
+
     def fn(data):
         return augmentations(data)
+
     return fn
 
 
@@ -49,33 +51,36 @@ def albumentations_to_callable_with_dict(albumentation: list | None = None):
 
     return fn
 
+
 def default_non_image_transform(array):
     if array.dtype in (float, int):
         return torch.from_numpy(array)
     else:
         return array
 
+
 class Padding(ImageOnlyTransform):
     """Padding to adjust (slight) discrepancies between input images"""
 
-    def __init__(self, input_shape: list=None):
+    def __init__(self, input_shape: list = None):
         super().__init__(True, 1)
         self.input_shape = input_shape
 
     def apply(self, img, **params):
 
         shape = img.shape[-2:]
-        pad_values_ = [j - i for i,j in zip(shape, self.input_shape)]
+        pad_values_ = [j - i for i, j in zip(shape, self.input_shape)]
 
-        if all([i%2==0 for i in pad_values_]):
-            pad_values = sum([[int(j/2), int(j/2)] for j in  pad_values_], [])
+        if all([i % 2 == 0 for i in pad_values_]):
+            pad_values = sum([[int(j / 2), int(j / 2)] for j in pad_values_], [])
         else:
-            pad_values = sum([[0, j] for j in  pad_values_], [])
+            pad_values = sum([[0, j] for j in pad_values_], [])
 
         return F.pad(img, pad_values)
 
     def get_transform_init_args_names(self):
         return ()
+
 
 class FlattenTemporalIntoChannels(ImageOnlyTransform):
     """
@@ -84,6 +89,7 @@ class FlattenTemporalIntoChannels(ImageOnlyTransform):
     This transform rearranges an input tensor with a temporal dimension into one where the time and channel dimensions
     are merged. It expects the input to have a fixed number of dimensions defined by N_DIMS_FOR_TEMPORAL.
     """
+
     def __init__(self):
         """
         Initialize the FlattenTemporalIntoChannels transform.
@@ -140,6 +146,7 @@ class UnflattenTemporalFromChannels(ImageOnlyTransform):
     def get_transform_init_args_names(self):
         return ("n_timesteps", "n_channels")
 
+
 class FlattenSamplesIntoChannels(ImageOnlyTransform):
     """
     FlattenSamplesIntoChannels is an image transformation that merges the sample (and optionally temporal) dimensions into the channel dimension.
@@ -147,6 +154,7 @@ class FlattenSamplesIntoChannels(ImageOnlyTransform):
     This transform rearranges an input tensor by flattening the sample dimension, and if specified, also the temporal dimension,
     thereby concatenating these dimensions into a single channel dimension.
     """
+
     def __init__(self, time_dim: bool = True):
         """
         Initialize the FlattenSamplesIntoChannels transform.
@@ -159,8 +167,7 @@ class FlattenSamplesIntoChannels(ImageOnlyTransform):
 
     def apply(self, img, **params):
         if self.time_dim:
-            rearranged = rearrange(img,
-                                   "samples time height width channels -> height width (samples time channels)")
+            rearranged = rearrange(img, "samples time height width channels -> height width (samples time channels)")
         else:
             rearranged = rearrange(img, "samples height width channels -> height width (samples channels)")
         return rearranged
@@ -176,12 +183,13 @@ class UnflattenSamplesFromChannels(ImageOnlyTransform):
     This transform is designed to reverse the flattening performed by FlattenSamplesIntoChannels and is typically applied
     after converting images to a channels-first format.
     """
+
     def __init__(
-            self,
-            time_dim: bool = True,
-            n_samples: int | None = None,
-            n_timesteps: int | None = None,
-            n_channels: int | None = None
+        self,
+        time_dim: bool = True,
+        n_samples: int | None = None,
+        n_timesteps: int | None = None,
+        n_channels: int | None = None,
     ):
         """
         Initialize the UnflattenSamplesFromChannels transform.
@@ -218,8 +226,9 @@ class UnflattenSamplesFromChannels(ImageOnlyTransform):
     def apply(self, img, **params):
         if self.time_dim:
             rearranged = rearrange(
-                img, "(samples time channels) height width -> samples channels time height width",
-                **self.additional_info
+                img,
+                "(samples time channels) height width -> samples channels time height width",
+                **self.additional_info,
             )
         else:
             rearranged = rearrange(
@@ -320,12 +329,13 @@ class MultimodalTransforms:
     This class supports both shared transformations across modalities and separate transformations for each modality.
     It also handles non-image modalities by applying a specified non-image transform.
     """
+
     def __init__(
-            self,
-            transforms: dict | A.Compose,
-            shared : bool = True,
-            non_image_modalities: list[str] | None = None,
-            non_image_transform: object | None = None,
+        self,
+        transforms: dict | A.Compose,
+        shared: bool = True,
+        non_image_modalities: list[str] | None = None,
+        non_image_transform: object | None = None,
     ):
         """
         Initialize the MultimodalTransforms.
@@ -345,10 +355,10 @@ class MultimodalTransforms:
         if self.shared:
             # albumentations requires a key 'image' and treats all other keys as additional targets
             # (+ don't select 'mask' as 'image')
-            image_modality = [k for k in data.keys() if k not in self.non_image_modalities + ['mask']][0]
-            data['image'] = data.pop(image_modality)
+            image_modality = [k for k in data.keys() if k not in self.non_image_modalities + ["mask"]][0]
+            data["image"] = data.pop(image_modality)
             data = self.transforms(**data)
-            data[image_modality] = data.pop('image')
+            data[image_modality] = data.pop("image")
 
             # Process sequence data which is ignored by albumentations as 'global_label'
             for modality in self.non_image_modalities:
@@ -360,13 +370,13 @@ class MultimodalTransforms:
                     if key in self.non_image_modalities:
                         raise NotImplementedError("Non image modalities not implemented.")
                     else:
-                        data[key] = self.transforms[key](image=value)['image']
+                        data[key] = self.transforms[key](image=value)["image"]
 
         return data
 
-    
+
 class AddConstantToLabels(nn.Module):
-    def __init__(self, label_key = 'label', constant=1):
+    def __init__(self, label_key="label", constant=1):
         super().__init__()
         self.label_key = label_key
         self.constant = constant
@@ -375,5 +385,5 @@ class AddConstantToLabels(nn.Module):
         # Assumes sample is a dict with a 'label' key
         # and that sample['label'] is a torch.Tensor
         sample = sample.copy()  # To avoid modifying the original sample
-        sample[self.label_key] = sample[self.label_key] + self.constant 
+        sample[self.label_key] = sample[self.label_key] + self.constant
         return sample

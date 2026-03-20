@@ -1,6 +1,7 @@
 # Copyright contributors to the Terratorch project
-from typing import List
 import logging
+from typing import List
+
 import torch
 import torch.nn.functional as F  # noqa: N812
 from segmentation_models_pytorch.base import SegmentationModel

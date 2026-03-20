@@ -1,15 +1,18 @@
-from torchgeo.trainers import BaseTask
-import torch.nn as nn
-import torch
 import logging
+
+import torch
+from torch import nn
+from torchgeo.trainers import BaseTask
+
 logger = logging.getLogger(__name__)
 
 from terratorch.registry import MODEL_FACTORY_REGISTRY
 
+
 class WxCTask(BaseTask):
-    def __init__(self, model_factory, model_args: dict, mode:str='train', learning_rate=0.1):
-        if mode not in ['train', 'eval']:
-            raise ValueError(f'mode {mode} is not supported. (train, eval)')
+    def __init__(self, model_factory, model_args: dict, mode: str = "train", learning_rate=0.1):
+        if mode not in ["train", "eval"]:
+            raise ValueError(f"mode {mode} is not supported. (train, eval)")
         self.model_args = model_args
 
         self.model_factory = MODEL_FACTORY_REGISTRY.build(model_factory)
@@ -19,7 +22,7 @@ class WxCTask(BaseTask):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-    
+
     def configure_models(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -36,4 +39,3 @@ class WxCTask(BaseTask):
 
     def train_dataloader(self):
         return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
-        

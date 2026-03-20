@@ -1,5 +1,6 @@
 # Copyright contributors to the Terratorch project
 
+import collections
 import logging
 import warnings
 
@@ -7,7 +8,7 @@ import torch
 from torch import nn
 
 from terratorch.datasets import HLSBands, OpticalBands, SARBands
-import collections
+
 
 def patch_embed_weights_are_compatible(model_patch_embed: torch.Tensor, checkpoint_patch_embed: torch.Tensor) -> bool:
     # check all dimensions are the same except for channel dimension
@@ -17,6 +18,7 @@ def patch_embed_weights_are_compatible(model_patch_embed: torch.Tensor, checkpoi
     model_shape = [model_patch_embed.shape[i] for i in range(len(model_patch_embed.shape)) if i != 1]
     checkpoint_shape = [checkpoint_patch_embed.shape[i] for i in range(len(checkpoint_patch_embed.shape)) if i != 1]
     return model_shape == checkpoint_shape
+
 
 def get_state_dict(state_dict):
 
@@ -34,6 +36,7 @@ def get_state_dict(state_dict):
         return state_dict[state_dict_key]
     else:
         return state_dict
+
 
 def get_common_prefix(keys):
 
@@ -56,28 +59,29 @@ def get_common_prefix(keys):
 
     return prefix
 
+
 def get_proj_key(state_dict, encoder_only=True, return_prefix=False):
 
-    proj_key = None 
+    proj_key = None
 
     for key in state_dict.keys():
-        if key.endswith('patch_embed.proj.weight') or key.endswith('patch_embed.projection.weight'):
+        if key.endswith("patch_embed.proj.weight") or key.endswith("patch_embed.projection.weight"):
             proj_key = key
             break
 
-
     if return_prefix and proj_key:
         if encoder_only:
-            for sufix in ['patch_embed.proj.weight', 'patch_embed.projection.weight']:
+            for sufix in ["patch_embed.proj.weight", "patch_embed.projection.weight"]:
                 if proj_key.endswith(sufix):
                     prefix = proj_key.replace(sufix, "")
                     break
         else:
-                prefix = get_common_prefix(state_dict.keys()) 
+            prefix = get_common_prefix(state_dict.keys())
     else:
         prefix = None
 
     return proj_key, prefix
+
 
 def remove_prefixes(state_dict, prefix):
     new_state_dict = {}
@@ -85,10 +89,15 @@ def remove_prefixes(state_dict, prefix):
         new_state_dict[k.replace(prefix, "")] = v
     return new_state_dict
 
-def select_patch_embed_weights(
-    state_dict: dict, model: nn.Module, pretrained_bands: list[HLSBands | int | OpticalBands| SARBands], model_bands: list[HLSBands | int | OpticalBands| SARBands],
-    proj_key: str | None = None, encoder_only:bool=True) -> dict:
 
+def select_patch_embed_weights(
+    state_dict: dict,
+    model: nn.Module,
+    pretrained_bands: list[HLSBands | int | OpticalBands | SARBands],
+    model_bands: list[HLSBands | int | OpticalBands | SARBands],
+    proj_key: str | None = None,
+    encoder_only: bool = True,
+) -> dict:
     """Filter out the patch embedding weights according to the bands being used.
     If a band exists in the pretrained_bands, but not in model_bands, drop it.
     If a band exists in model_bands, but not pretrained_bands, randomly initialize those weights.
@@ -105,9 +114,8 @@ def select_patch_embed_weights(
         dict: New state dict
     """
     if (type(pretrained_bands) == type(model_bands)) | (type(pretrained_bands) == int) | (type(model_bands) == int):
-
-        state_dict = get_state_dict(state_dict) 
-        prefix = None # we expect no prefix will be necessary in principle 
+        state_dict = get_state_dict(state_dict)
+        prefix = None  # we expect no prefix will be necessary in principle
 
         if proj_key is None:
             # Search for patch embedding weight in state dict
@@ -117,9 +125,9 @@ def select_patch_embed_weights(
 
         patch_embed_weight = state_dict[proj_key]
 
-        # It seems `proj_key` can have different names for 
+        # It seems `proj_key` can have different names for
         # the checkpoint and the model instance
-        proj_key_, _  = get_proj_key(model.state_dict(), encoder_only=encoder_only)
+        proj_key_, _ = get_proj_key(model.state_dict(), encoder_only=encoder_only)
 
         if proj_key_:
             temp_weight = model.state_dict()[proj_key_].clone()

@@ -7,7 +7,7 @@ This is because it offers a few advantages, namely being able to handle
 a dynamic input size through padding.
 
 Please note the original timm implementation can still be used as a backbone
-via `timm.create_model("swin_...")`. You can see the available models with `timm.list_models("swin*")`. 
+via `timm.create_model("swin_...")`. You can see the available models with `timm.list_models("swin*")`.
 """
 
 import collections
@@ -576,7 +576,7 @@ class ShiftWindowMSA(nn.Module):
             shifted_query = torch.roll(query, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
 
             # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, H_pad, W_pad, 1), device=query.device,dtype=query.dtype)
+            img_mask = torch.zeros((1, H_pad, W_pad, 1), device=query.device, dtype=query.dtype)
             h_slices = (
                 slice(0, -self.window_size),
                 slice(-self.window_size, -self.shift_size),
@@ -597,7 +597,7 @@ class ShiftWindowMSA(nn.Module):
             mask_windows = self.window_partition(img_mask)
             mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
             attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, 0.0)
+            attn_mask = attn_mask.masked_fill(attn_mask != 0, (-100.0)).masked_fill(attn_mask == 0, 0.0)
         else:
             shifted_query = query
             attn_mask = None
@@ -662,7 +662,7 @@ class ShiftWindowMSA(nn.Module):
 
 
 class SwinBlock(nn.Module):
-    """ 
+    """
     Args:
         embed_dim (int): The feature dimension.
         num_heads (int): Parallel attention heads.
@@ -841,7 +841,6 @@ class SwinBlockSequence(nn.Module):
 
 
 class MMSegSwinTransformer(nn.Module):
-
     def __init__(
         self,
         pretrain_img_size=224,
@@ -1012,7 +1011,7 @@ class MMSegSwinTransformer(nn.Module):
 
         for i in range(1, self.frozen_stages + 1):
             if (i - 1) in self.out_indices:
-                norm_layer = getattr(self, f"norm{i-1}")
+                norm_layer = getattr(self, f"norm{i - 1}")
                 norm_layer.eval()
                 for param in norm_layer.parameters():
                     param.requires_grad = False

@@ -74,9 +74,9 @@ class OpenSentinelMapDataModule(NonGeoDataModule):
                 data_root=self.data_root,
                 transform=self.train_transform,
                 bands=self.bands,
-                spatial_interpolate_and_stack_temporally = self.spatial_interpolate_and_stack_temporally,
-                pad_image = self.pad_image,
-                truncate_image = self.truncate_image,
+                spatial_interpolate_and_stack_temporally=self.spatial_interpolate_and_stack_temporally,
+                pad_image=self.pad_image,
+                truncate_image=self.truncate_image,
                 **self.kwargs,
             )
         if stage in ["fit", "validate"]:
@@ -85,9 +85,9 @@ class OpenSentinelMapDataModule(NonGeoDataModule):
                 data_root=self.data_root,
                 transform=self.val_transform,
                 bands=self.bands,
-                spatial_interpolate_and_stack_temporally = self.spatial_interpolate_and_stack_temporally,
-                pad_image = self.pad_image,
-                truncate_image = self.truncate_image,
+                spatial_interpolate_and_stack_temporally=self.spatial_interpolate_and_stack_temporally,
+                pad_image=self.pad_image,
+                truncate_image=self.truncate_image,
                 **self.kwargs,
             )
         if stage in ["test"]:
@@ -96,9 +96,9 @@ class OpenSentinelMapDataModule(NonGeoDataModule):
                 data_root=self.data_root,
                 transform=self.test_transform,
                 bands=self.bands,
-                spatial_interpolate_and_stack_temporally = self.spatial_interpolate_and_stack_temporally,
-                pad_image = self.pad_image,
-                truncate_image = self.truncate_image,
+                spatial_interpolate_and_stack_temporally=self.spatial_interpolate_and_stack_temporally,
+                pad_image=self.pad_image,
+                truncate_image=self.truncate_image,
                 **self.kwargs,
             )
         if stage in ["predict"]:
@@ -107,8 +107,8 @@ class OpenSentinelMapDataModule(NonGeoDataModule):
                 data_root=self.data_root,
                 transform=self.predict_transform,
                 bands=self.bands,
-                spatial_interpolate_and_stack_temporally = self.spatial_interpolate_and_stack_temporally,
-                pad_image = self.pad_image,
-                truncate_image = self.truncate_image,
+                spatial_interpolate_and_stack_temporally=self.spatial_interpolate_and_stack_temporally,
+                pad_image=self.pad_image,
+                truncate_image=self.truncate_image,
                 **self.kwargs,
             )

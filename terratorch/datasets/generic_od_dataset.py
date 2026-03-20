@@ -1,8 +1,10 @@
 import os
+
 import torch
-from torch.utils.data import Dataset
 from PIL import Image
+from torch.utils.data import Dataset
 from torchvision.transforms import ToTensor
+
 
 class GenericObjectDetectionDataset(Dataset):
     def __init__(
@@ -21,10 +23,7 @@ class GenericObjectDetectionDataset(Dataset):
         self.label_dir = label_dir
         self.transforms = transforms
 
-        self.images = sorted([
-            f for f in os.listdir(image_dir)
-            if f.lower().endswith((".jpg", ".png", ".tif"))
-        ])
+        self.images = sorted([f for f in os.listdir(image_dir) if f.lower().endswith((".jpg", ".png", ".tif"))])
 
         self.to_tensor = ToTensor()
 
@@ -50,10 +49,7 @@ class GenericObjectDetectionDataset(Dataset):
                 boxes.append([x1, y1, x2, y2])
                 labels.append(int(cls))
 
-        return (
-            torch.tensor(boxes, dtype=torch.float32),
-            torch.tensor(labels, dtype=torch.long)
-        )
+        return (torch.tensor(boxes, dtype=torch.float32), torch.tensor(labels, dtype=torch.long))
 
     def __getitem__(self, idx):
         img_name = self.images[idx]
@@ -63,10 +59,7 @@ class GenericObjectDetectionDataset(Dataset):
         W, H = image.size
 
         if self.label_dir is not None:
-            label_path = os.path.join(
-                self.label_dir,
-                os.path.splitext(img_name)[0] + ".txt"
-            )
+            label_path = os.path.join(self.label_dir, os.path.splitext(img_name)[0] + ".txt")
             boxes, labels = self._load_labels(label_path, W, H)
         else:
             boxes = torch.empty((0, 4))
@@ -74,15 +67,9 @@ class GenericObjectDetectionDataset(Dataset):
 
         image = self.to_tensor(image)
 
-        target = {
-            "boxes": boxes,
-            "labels": labels
-        }
+        target = {"boxes": boxes, "labels": labels}
 
         if self.transforms is not None:
             image, target = self.transforms(image, target)
 
-        return {
-            "image": image,
-            **target
-        }
+        return {"image": image, **target}

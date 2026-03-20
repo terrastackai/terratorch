@@ -1,17 +1,14 @@
-from terratorch.registry import TERRATORCH_BACKBONE_REGISTRY
-import torch
-from torch import nn
-import numpy as np
 import pdb
-from torch import Tensor
+
+import numpy as np
+import torch
+from torch import Tensor, nn
+
+from terratorch.registry import TERRATORCH_BACKBONE_REGISTRY
 
 
 class DinoV3Wrapper(nn.Module):
-    def __init__(self, 
-                 model: str,
-                 ckpt_path: str = None,
-                 return_cls_token: bool =True, 
-                 **kwargs):
+    def __init__(self, model: str, ckpt_path: str = None, return_cls_token: bool = True, **kwargs):
         """
         TerraTorch wrapper for DINO V3 models.
 
@@ -27,12 +24,16 @@ class DinoV3Wrapper(nn.Module):
 
         super().__init__()
         if ckpt_path is None:
-            self.dinov3 = torch.hub.load("facebookresearch/dinov3", model, pretrained= False)
+            self.dinov3 = torch.hub.load("facebookresearch/dinov3", model, pretrained=False)
         else:
-            self.dinov3 = torch.hub.load("facebookresearch/dinov3", model, weights= ckpt_path)
-            
-        self.out_channels = [self.dinov3.embed_dim]*len(self.dinov3.blocks) if hasattr(self.dinov3, 'blocks') else self.dinov3.embed_dims
-        self.output_indexes = list(np.arange(len(self.dinov3.blocks))) if hasattr(self.dinov3, 'blocks') else 4
+            self.dinov3 = torch.hub.load("facebookresearch/dinov3", model, weights=ckpt_path)
+
+        self.out_channels = (
+            [self.dinov3.embed_dim] * len(self.dinov3.blocks)
+            if hasattr(self.dinov3, "blocks")
+            else self.dinov3.embed_dims
+        )
+        self.output_indexes = list(np.arange(len(self.dinov3.blocks))) if hasattr(self.dinov3, "blocks") else 4
         self.return_cls_token = return_cls_token
 
     def forward(self, x: Tensor):
@@ -56,9 +57,7 @@ class DinoV3Wrapper(nn.Module):
 
 
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_vits16(ckpt_path: str,
-                  return_cls_token: bool = True,
-                  **kwargs):
+def dinov3_vits16(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_vits16 model
 
@@ -70,17 +69,15 @@ def dinov3_vits16(ckpt_path: str,
         DinoV3Wrapper dinov3_vits16 model
 
     """
-    
+
     # Init model
     model = DinoV3Wrapper(model="dinov3_vits16", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs)
 
     return model
 
+
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_vits16plus(ckpt_path: str,
-                      return_cls_token: bool = True,
-                      **kwargs):
-    
+def dinov3_vits16plus(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_vits16plus model
 
@@ -93,15 +90,14 @@ def dinov3_vits16plus(ckpt_path: str,
 
     """
 
-    # Init model    
+    # Init model
     model = DinoV3Wrapper(model="dinov3_vits16plus", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs)
 
     return model
 
+
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_vitb16(ckpt_path: str,
-                  return_cls_token: bool = True,
-                  **kwargs):
+def dinov3_vitb16(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_vitb16 model
 
@@ -121,10 +117,7 @@ def dinov3_vitb16(ckpt_path: str,
 
 
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_vitl16plus(ckpt_path: str,
-                      return_cls_token: bool = True,
-                      **kwargs):
-    
+def dinov3_vitl16plus(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_vitb16 model
 
@@ -137,17 +130,14 @@ def dinov3_vitl16plus(ckpt_path: str,
 
     """
 
-    # Init model    
+    # Init model
     model = DinoV3Wrapper(model="dinov3_vitl16plus", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs)
 
     return model
 
 
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_vitl16(ckpt_path: str,
-                  return_cls_token: bool = True,
-                  **kwargs):
-    
+def dinov3_vitl16(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_vitl16 model
 
@@ -160,17 +150,14 @@ def dinov3_vitl16(ckpt_path: str,
 
     """
 
-    # Init model    
+    # Init model
     model = DinoV3Wrapper(model="dinov3_vitl16", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs)
 
     return model
 
 
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_vith16plus(ckpt_path: str,
-                      return_cls_token: bool = True,
-                      **kwargs):
-
+def dinov3_vith16plus(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_vith16plus model
 
@@ -183,16 +170,14 @@ def dinov3_vith16plus(ckpt_path: str,
 
     """
 
-    # Init model    
+    # Init model
     model = DinoV3Wrapper(model="dinov3_vith16plus", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs)
 
     return model
 
 
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_vit7b16(ckpt_path: str,
-                   return_cls_token: bool = True,
-                   **kwargs):
+def dinov3_vit7b16(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_vit7b16 model
 
@@ -204,18 +189,15 @@ def dinov3_vit7b16(ckpt_path: str,
         DinoV3Wrapper dinov3_vit7b16 model
 
     """
-    
-    # Init model    
+
+    # Init model
     model = DinoV3Wrapper(model="dinov3_vit7b16", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs)
 
     return model
 
 
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_convnext_base(ckpt_path: str,
-                         return_cls_token: bool = True,
-                         **kwargs):
-    
+def dinov3_convnext_base(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_convnext_base model
 
@@ -227,18 +209,17 @@ def dinov3_convnext_base(ckpt_path: str,
         DinoV3Wrapper dinov3_convnext_base model
 
     """
-    
-    # Init model    
-    model = DinoV3Wrapper(model="dinov3_convnext_base", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs)
+
+    # Init model
+    model = DinoV3Wrapper(
+        model="dinov3_convnext_base", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs
+    )
 
     return model
 
 
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_convnext_large(ckpt_path: str,
-                          return_cls_token: bool = True,
-                          **kwargs):
-
+def dinov3_convnext_large(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_convnext_large model
 
@@ -251,17 +232,16 @@ def dinov3_convnext_large(ckpt_path: str,
 
     """
 
-    # Init model    
-    model = DinoV3Wrapper(model="dinov3_convnext_large", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs)
+    # Init model
+    model = DinoV3Wrapper(
+        model="dinov3_convnext_large", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs
+    )
 
     return model
 
 
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_convnext_small(ckpt_path: str,
-                          return_cls_token: bool = True,
-                          **kwargs):
-
+def dinov3_convnext_small(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_convnext_small model
 
@@ -274,17 +254,16 @@ def dinov3_convnext_small(ckpt_path: str,
 
     """
 
-    # Init model    
-    model = DinoV3Wrapper(model="dinov3_convnext_small", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs)
+    # Init model
+    model = DinoV3Wrapper(
+        model="dinov3_convnext_small", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs
+    )
 
     return model
 
 
 @TERRATORCH_BACKBONE_REGISTRY.register
-def dinov3_convnext_tiny(ckpt_path: str,
-                         return_cls_token: bool = True,
-                         **kwargs):
-
+def dinov3_convnext_tiny(ckpt_path: str, return_cls_token: bool = True, **kwargs):
     """
     Constructor for the dinov3_convnext_tiny model
 
@@ -297,10 +276,9 @@ def dinov3_convnext_tiny(ckpt_path: str,
 
     """
 
-    # Init model    
-    model = DinoV3Wrapper(model="dinov3_convnext_tiny", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs)
+    # Init model
+    model = DinoV3Wrapper(
+        model="dinov3_convnext_tiny", ckpt_path=ckpt_path, return_cls_token=return_cls_token, **kwargs
+    )
 
     return model
-
-
-

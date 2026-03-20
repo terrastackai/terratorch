@@ -1,10 +1,12 @@
 import glob
 import os
+
+import lightning as pl
 import torch
 import xarray as xr
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
-import lightning as pl
+
 
 def get_era5_uvtp122(ds: xr.Dataset, index: int = 0) -> dict[str, torch.Tensor]:
     """Retrieve climate data variables at 122 pressure levels.
@@ -32,9 +34,7 @@ def get_era5_uvtp122(ds: xr.Dataset, index: int = 0) -> dict[str, torch.Tensor]:
     pressure = ds_t0["features"].isel(idim=slice(369, 491))
 
     # Reorder --> theta, pressure, u, v
-    tensor_x = torch.tensor(
-        data=xr.concat(objs=[theta, pressure, u, v], dim="idim").data.compute()
-    )
+    tensor_x = torch.tensor(data=xr.concat(objs=[theta, pressure, u, v], dim="idim").data.compute())
     assert tensor_x.shape == torch.Size([488, 64, 128])
 
     # Load output labels from the dataset and convert to a tensor
@@ -64,7 +64,7 @@ class ERA5Dataset(Dataset):
 
     def __init__(
         self,
-        data_path: str = "data/uvtp122", 
+        data_path: str = "data/uvtp122",
         file_glob_pattern: str = "inputfeatures_u_v_theta_uw_vw_era5_training_data_hourly_*.nc",  # or "wxc_input_u_v_t_p_*.nc", or "era5_uvtp_uw_vw_uv_*.nc"
     ):
         """Initializes the ERA5Dataset class by loading NetCDF files.
@@ -76,29 +76,21 @@ class ERA5Dataset(Dataset):
             ValueError: If no NetCDF files matching the pattern are found.
         """
 
-        nc_files: list[str] = glob.glob(
-            pathname=os.path.join(data_path, file_glob_pattern)
-        )
+        nc_files: list[str] = glob.glob(pathname=os.path.join(data_path, file_glob_pattern))
 
         if len(nc_files) == 0:
             raise ValueError(f"No finetuning NetCDF files found at {data_path}")
 
-        self.ds: xr.Dataset = xr.open_mfdataset(
-            paths=nc_files, chunks={"time": 1}, combine="nested", concat_dim="time"
-        )
+        self.ds: xr.Dataset = xr.open_mfdataset(paths=nc_files, chunks={"time": 1}, combine="nested", concat_dim="time")
 
         # Calculate static surface variables (latitude and longitude in radians)
         latitudes = self.ds.lat.data / 360 * 2.0 * torch.pi
         longitudes = self.ds.lon.data / 360 * 2.0 * torch.pi
 
         # Create a meshgrid of latitudes and longitudes
-        latitudes, longitudes = torch.meshgrid(
-            torch.as_tensor(latitudes), torch.as_tensor(longitudes), indexing="ij"
-        )
+        latitudes, longitudes = torch.meshgrid(torch.as_tensor(latitudes), torch.as_tensor(longitudes), indexing="ij")
         # Stack sine and cosine of latitude and longitude to create static surface tensor
-        self.sur_static = torch.stack(
-            [torch.sin(latitudes), torch.cos(longitudes), torch.sin(longitudes)], axis=0
-        )
+        self.sur_static = torch.stack([torch.sin(latitudes), torch.cos(longitudes), torch.sin(longitudes)], axis=0)
 
     def __len__(self) -> int:
         """Returns the total number of timesteps in the dataset.
@@ -143,7 +135,7 @@ class ERA5DataModule(pl.LightningDataModule):
         valid_data_path: Path to validation data.
         file_glob_pattern: Pattern to match NetCDF files.
         batch_size: Size of each mini-batch.
-        num_workers: Number of subprocesses for data loading.   
+        num_workers: Number of subprocesses for data loading.
     """
 
     def __init__(
@@ -177,20 +169,13 @@ class ERA5DataModule(pl.LightningDataModule):
     def setup(self, stage: str | None = None) -> tuple[Dataset, Dataset]:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if stage == "fit":
-            self.dataset_train = ERA5Dataset(
-                data_path=self.train_data_path, file_glob_pattern=self.file_glob_pattern
-            )
-            #self.dataset_train = self.dataset_train.to(device)
-            self.dataset_val = ERA5Dataset(
-                data_path=self.valid_data_path, file_glob_pattern=self.file_glob_pattern
-            )
-            #self.dataset_val = self.dataset_val.to(device)
+            self.dataset_train = ERA5Dataset(data_path=self.train_data_path, file_glob_pattern=self.file_glob_pattern)
+            # self.dataset_train = self.dataset_train.to(device)
+            self.dataset_val = ERA5Dataset(data_path=self.valid_data_path, file_glob_pattern=self.file_glob_pattern)
+            # self.dataset_val = self.dataset_val.to(device)
         elif stage == "predict":
-            self.dataset_predict = ERA5Dataset(
-                data_path=self.valid_data_path, file_glob_pattern=self.file_glob_pattern
-            )
-            #self.dataset_predict = self.dataset_predict.to(device)
-
+            self.dataset_predict = ERA5Dataset(data_path=self.valid_data_path, file_glob_pattern=self.file_glob_pattern)
+            # self.dataset_predict = self.dataset_predict.to(device)
 
     def train_dataloader(self) -> DataLoader:
         """Returns a DataLoader for the training data."""

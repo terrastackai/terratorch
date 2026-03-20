@@ -45,8 +45,7 @@ def get_wandb_logger(trainer: L.Trainer) -> L.pytorch.loggers.WandbLogger:
 
     if trainer.fast_dev_run:
         raise Exception(
-            "Cannot use wandb callbacks since pytorch lightning disables "
-            "loggers in `fast_dev_run=true` mode."
+            "Cannot use wandb callbacks since pytorch lightning disables loggers in `fast_dev_run=true` mode."
         )
 
     for logger in trainer.loggers:
@@ -54,10 +53,7 @@ def get_wandb_logger(trainer: L.Trainer) -> L.pytorch.loggers.WandbLogger:
             return logger
             break
 
-    raise Exception(
-        "You are using wandb related callback, "
-        "but WandbLogger was not found for some reason..."
-    )
+    raise Exception("You are using wandb related callback, but WandbLogger was not found for some reason...")
 
 
 class LogMAEReconstruction(L.Callback):
@@ -120,43 +116,29 @@ class LogMAEReconstruction(L.Callback):
                 # Turn raw logits into reconstructed 512x512 images
                 patchified_pixel_values: torch.Tensor = outputs["logits"]
                 # assert patchified_pixel_values.shape == torch.Size([32, 64, 53248])
-                y_hat: torch.Tensor = pl_module.vit.unpatchify(
-                    patchified_pixel_values=patchified_pixel_values
-                )
+                y_hat: torch.Tensor = pl_module.vit.unpatchify(patchified_pixel_values=patchified_pixel_values)
                 # assert y_hat.shape == torch.Size([32, 13, 512, 512])
 
                 # Reshape tensors from channel-first to channel-last
-                x: torch.Tensor = torch.einsum(
-                    "bchw->bhwc", batch["image"][: self.num_samples]
-                )
-                y_hat: torch.Tensor = torch.einsum(
-                    "bchw->bhwc", y_hat[: self.num_samples]
-                )
+                x: torch.Tensor = torch.einsum("bchw->bhwc", batch["image"][: self.num_samples])
+                y_hat: torch.Tensor = torch.einsum("bchw->bhwc", y_hat[: self.num_samples])
                 # assert y_hat.shape == torch.Size([8, 512, 512, 13])
                 assert x.shape == y_hat.shape
 
                 # Plot original and reconstructed RGB images of Sentinel-2
-                rgb_original: np.ndarray = (
-                    x[:, :, :, [2, 1, 0]].cpu().to(dtype=torch.float32).numpy()
-                )
-                rgb_reconstruction: np.ndarray = (
-                    y_hat[:, :, :, [2, 1, 0]].cpu().to(dtype=torch.float32).numpy()
-                )
+                rgb_original: np.ndarray = x[:, :, :, [2, 1, 0]].cpu().to(dtype=torch.float32).numpy()
+                rgb_reconstruction: np.ndarray = y_hat[:, :, :, [2, 1, 0]].cpu().to(dtype=torch.float32).numpy()
 
                 figures: list[wandb.Image] = []
                 for i in range(min(x.shape[0], self.num_samples)):
                     img_original = wandb.Image(
-                        data_or_path=skimage.exposure.equalize_hist(
-                            image=rgb_original[i]
-                        ),
+                        data_or_path=skimage.exposure.equalize_hist(image=rgb_original[i]),
                         caption=f"RGB Image {i}",
                     )
                     figures.append(img_original)
 
                     img_reconstruction = wandb.Image(
-                        data_or_path=skimage.exposure.equalize_hist(
-                            image=rgb_reconstruction[i]
-                        ),
+                        data_or_path=skimage.exposure.equalize_hist(image=rgb_reconstruction[i]),
                         caption=f"Reconstructed {i}",
                     )
                     figures.append(img_reconstruction)
@@ -197,17 +179,9 @@ class LogIntermediatePredictions(L.Callback):
                 batch = next(val_dl)
                 platform = batch["platform"][0]
 
-                batch = {
-                    k: v.to(pl_module.device)
-                    for k, v in batch.items()
-                    if isinstance(v, torch.Tensor)
-                }
+                batch = {k: v.to(pl_module.device) for k, v in batch.items() if isinstance(v, torch.Tensor)}
 
-                waves = torch.tensor(
-                    list(
-                        trainer.datamodule.metadata[platform].bands.wavelength.values()
-                    )
-                )
+                waves = torch.tensor(list(trainer.datamodule.metadata[platform].bands.wavelength.values()))
                 gsd = torch.tensor(trainer.datamodule.metadata[platform].gsd)
 
                 # ENCODER
@@ -265,7 +239,7 @@ class LogIntermediatePredictions(L.Callback):
                         batch["pixels"][j + n_cols][0],
                         cmap="viridis",
                     )
-                    axs[2, j].set_title(f"Actual {j+n_cols}")
+                    axs[2, j].set_title(f"Actual {j + n_cols}")
                     axs[2, j].axis("off")
 
                     # Plot predicted images in rows 1 and 3
@@ -274,7 +248,7 @@ class LogIntermediatePredictions(L.Callback):
                     axs[1, j].axis("off")
 
                     axs[3, j].imshow(pixels[j + n_cols][0], cmap="viridis")
-                    axs[3, j].set_title(f"Pred {j+n_cols}")
+                    axs[3, j].set_title(f"Pred {j + n_cols}")
                     axs[3, j].axis("off")
 
                 self.logger.experiment.log({f"{platform}": wandb.Image(fig)})

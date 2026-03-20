@@ -27,36 +27,46 @@ SCALAR_TASKS = ["classification", "scalar_regression"]
 SUPPORTED_TASKS = PIXEL_WISE_TASKS + SCALAR_TASKS
 
 
-def check_the_kind_of_vit(name:str=None):
+def check_the_kind_of_vit(name: str = None):
     if "mae" in name.lower() or name == "MaskedAutoencoderViT":
         return "vit-mae"
     else:
         return "vit"
 
-def filter_cefficients_when_necessary(model_state_dict:dict=None, kind:str=None):
+
+def filter_cefficients_when_necessary(model_state_dict: dict = None, kind: str = None):
 
     # Head and backbone are not correctly separated in the original SatMAE source code
     if kind == "vit":
-        ban_list = ["patch_embed", "decoder_blocks", "decoder_pred", "channel_embed", "mask_token", "decoder_embed", "pos_embed"] #['pos_embed', 'patch_embed.proj.weight', 'patch_embed.proj.bias', 'head.weight', 'head.bias']
+        ban_list = [
+            "patch_embed",
+            "decoder_blocks",
+            "decoder_pred",
+            "channel_embed",
+            "mask_token",
+            "decoder_embed",
+            "pos_embed",
+        ]  # ['pos_embed', 'patch_embed.proj.weight', 'patch_embed.proj.bias', 'head.weight', 'head.bias']
     else:
         ban_list = list()
 
     try:
         for item in ban_list:
-            model_state_dict['model'].pop(item)
+            model_state_dict["model"].pop(item)
     except Exception:
         print("No weight was removed.")
 
     return model_state_dict
+
+
 class ModelWrapper(nn.Module):
+    def __init__(self, model: nn.Module = None, kind: str = None) -> None:
 
-    def __init__(self, model: nn.Module = None, kind:str=None) -> None:
-
-        super(ModelWrapper, self).__init__()
+        super().__init__()
 
         self.model = model
-        self.kind = kind 
-        self.embedding_shape = self.model.state_dict()['norm.bias'].shape[0]
+        self.kind = kind
+        self.embedding_shape = self.model.state_dict()["norm.bias"].shape[0]
 
         if self.kind == "vit":
             self.inner_forward = self.model.forward_features
@@ -80,18 +90,19 @@ class ModelWrapper(nn.Module):
 
     def _forward_vit(self, x, **kwargs):
 
-        x =  self.inner_forward(x)
+        x = self.inner_forward(x)
 
         return x
 
     def _forward_vit_mae(self, x, mask_ratio=0.75):
 
-        x, _, ids_restore =  self.inner_forward(x, mask_ratio)
+        x, _, ids_restore = self.inner_forward(x, mask_ratio)
 
         return x, ids_restore
 
     def summary(self):
         print(self)
+
 
 @MODEL_FACTORY_REGISTRY.register
 class SatMAEModelFactory(ModelFactory):
@@ -147,7 +158,7 @@ class SatMAEModelFactory(ModelFactory):
             nn.Module: _description_
         """
 
-        self.possible_modules = None 
+        self.possible_modules = None
 
         if not torch.cuda.is_available():
             self.CPU_ONLY = True
@@ -161,11 +172,10 @@ class SatMAEModelFactory(ModelFactory):
 
         # TODO: support auxiliary heads
         if not isinstance(backbone, nn.Module):
-            if not 'SatMAE' in kwargs[self.syspath_kwarg]:
+            if "SatMAE" not in kwargs[self.syspath_kwarg]:
                 msg = "This class only handles models for `SatMAE` encoders"
                 raise NotImplementedError(msg)
 
-                 
             task = task.lower()
             if task not in SUPPORTED_TASKS:
                 msg = f"Task {task} not supported. Please choose one of {SUPPORTED_TASKS}"
@@ -186,22 +196,22 @@ class SatMAEModelFactory(ModelFactory):
                     **backbone_kwargs,
                 )
             except Exception:
-
                 # When the model is not on HG, it needs be restored locally.
                 print("This model is not available on HuggingFace. Trying to instantiate locally ...")
 
                 assert checkpoint_path, "A checkpoint must be provided to restore the model."
 
                 # The SatMAE source code must be installed or available via PYTHONPATH.
-                try:  
+                try:
                     if self.syspath_kwarg in kwargs:
                         syspath_value = kwargs.get(self.syspath_kwarg)
 
                     else:
+                        Exception(
+                            f"It is necessary to define the variable {self.syspath_kwarg} on yaml"
+                            "config for restoring local model."
+                        )
 
-                        Exception(f"It is necessary to define the variable {self.syspath_kwarg} on yaml"
-                                                           "config for restoring local model.")
-    
                     sys.path.insert(0, syspath_value)
 
                     # There are dozens of classes in the SatMAE repo, but it seems to be the right open_generic_torch_model
@@ -210,20 +220,18 @@ class SatMAEModelFactory(ModelFactory):
                     self.possible_modules = [importlib.import_module(mod) for mod in ["models_mae", "models_vit"]]
 
                     for backbone_module in self.possible_modules:
-
                         backbone_template_ = getattr(backbone_module, backbone_name, None)
-                        if not backbone_template_ :
+                        if not backbone_template_:
                             pass
                         else:
                             backbone_template = backbone_template_
-                    
-                except ModuleNotFoundError:
 
+                except ModuleNotFoundError:
                     print(f"It is better to review the field {self.syspath_kwarg} in the yaml file.")
 
                 # Is it a ViT or a ViT-MAE ?
                 backbone_kind = check_the_kind_of_vit(name=backbone_name)
- 
+
                 backbone: nn.Module = ModelWrapper(model=backbone_template(**backbone_kwargs), kind=backbone_kind)
 
                 if self.CPU_ONLY:
@@ -231,7 +239,6 @@ class SatMAEModelFactory(ModelFactory):
                 else:
                     model_dict = torch.load(checkpoint_path, weights_only=True)
 
-               
                 # Filtering parameters from the model state_dict (when necessary)
                 model_dict = filter_cefficients_when_necessary(model_state_dict=model_dict, kind=backbone_kind)
 
@@ -239,12 +246,12 @@ class SatMAEModelFactory(ModelFactory):
                     backbone.model.fc_norm = nn.Identity()
                     backbone.model.head_drop = nn.Identity()
                     backbone.model.head = nn.Identity()
-                    backbone.model.pos_embed = None # TODO It needs be corrected from source
+                    backbone.model.pos_embed = None  # TODO It needs be corrected from source
 
                 # Load saved model when it exists
-                if  pretrained: 
-                    backbone.model.load_state_dict(model_dict['model'], strict=False)
-              
+                if pretrained:
+                    backbone.model.load_state_dict(model_dict["model"], strict=False)
+
                 # Print the general architecture
                 backbone.summary()
 
@@ -258,7 +265,7 @@ class SatMAEModelFactory(ModelFactory):
         # If backabone is a ViT-MAE, the attribute "num_patches" will be necessary
         if hasattr(backbone, "num_patches"):
             decoder_kwargs["num_patches"] = backbone.num_patches
-    
+
         # TODO: remove this
         if "SatMAEHead" in decoder:
             decoder: nn.Module = decoder_cls(**decoder_kwargs)
@@ -299,6 +306,7 @@ class SatMAEModelFactory(ModelFactory):
             rescale=rescale,
             auxiliary_heads=to_be_aux_decoders,
         )
+
 
 def _build_appropriate_model(
     task: str,

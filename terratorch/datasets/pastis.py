@@ -100,7 +100,7 @@ class PASTIS(NonGeoDataset):
         self.meta_patch.index = self.meta_patch["ID_PATCH"].astype(int)
         self.meta_patch.sort_index(inplace=True)
         # stores table for each satalite date
-        self.date_tables = {s: None for s in satellites}
+        self.date_tables = dict.fromkeys(satellites)
         # date interval used in the PASTIS benchmark paper.
         date_interval_begin, date_interval_end = date_interval
         self.date_range = np.array(range(date_interval_begin, date_interval_end))
@@ -115,9 +115,11 @@ class PASTIS(NonGeoDataset):
                 d = pd.DataFrame().from_dict(date_seq, orient="index")
                 d = d[0].apply(
                     lambda x: (
-                        datetime(int(str(x)[:4]), int(str(x)[4:6]), int(str(x)[6:]), tzinfo=timezone.utc)
-                        - self.reference_date
-                    ).days
+                        (
+                            datetime(int(str(x)[:4]), int(str(x)[4:6]), int(str(x)[6:]), tzinfo=timezone.utc)
+                            - self.reference_date
+                        ).days
+                    )
                 )
                 date_table.loc[pid, d.values] = 1
             date_table = date_table.fillna(0)

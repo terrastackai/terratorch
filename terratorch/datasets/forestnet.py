@@ -7,6 +7,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from pathlib import Path
 
+import albumentations as A
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -14,21 +15,20 @@ import torch
 from matplotlib.patches import Rectangle
 from PIL import Image
 from sklearn.model_selection import StratifiedShuffleSplit
-import albumentations as A
+from torchgeo.datasets import NonGeoDataset
 
 from terratorch.datasets.utils import default_transform, validate_bands
-from torchgeo.datasets import NonGeoDataset
 
 
 class ForestNetNonGeo(NonGeoDataset):
     """NonGeo dataset implementation for [ForestNet](https://huggingface.co/datasets/ibm-nasa-geospatial/ForestNet)."""
 
-    all_band_names = (
-        "RED", "GREEN", "BLUE", "NIR", "SWIR_1", "SWIR_2"
-    )
+    all_band_names = ("RED", "GREEN", "BLUE", "NIR", "SWIR_1", "SWIR_2")
 
     rgb_bands = (
-        "RED", "GREEN", "BLUE",
+        "RED",
+        "GREEN",
+        "BLUE",
     )
 
     splits = ("train", "test", "val")
@@ -127,10 +127,8 @@ class ForestNetNonGeo(NonGeoDataset):
         visible_images = np.stack(visible_images, axis=0)
         infrared_images = np.stack(infrared_images, axis=0)
         merged_images = np.concatenate([visible_images, infrared_images], axis=-1)
-        merged_images = merged_images[..., self.band_indices] # (T, H, W, 2C)
-        output = {
-            "image": merged_images.astype(np.float32)
-        }
+        merged_images = merged_images[..., self.band_indices]  # (T, H, W, 2C)
+        output = {"image": merged_images.astype(np.float32)}
 
         if self.transform:
             output = self.transform(**output)
@@ -156,8 +154,8 @@ class ForestNetNonGeo(NonGeoDataset):
         if self.use_metadata:
             dates = self._get_dates(selected_visible_images)
 
-        vis_images = [np.array(Image.open(img)) for img in selected_visible_images] # (T, H, W, C)
-        inf_images = [np.load(img, allow_pickle=True) for img in selected_infra_images] # (T, H, W, C)
+        vis_images = [np.array(Image.open(img)) for img in selected_visible_images]  # (T, H, W, C)
+        inf_images = [np.load(img, allow_pickle=True) for img in selected_infra_images]  # (T, H, W, C)
         return vis_images, inf_images, dates
 
     def least_cloudy_image(self, image_files):
@@ -176,7 +174,7 @@ class ForestNetNonGeo(NonGeoDataset):
     def match_timesteps(self, image_files, selected_images):
         if len(selected_images) < 3:
             extra_imgs = [img for img in image_files if img not in selected_images]
-            selected_images += extra_imgs[:3 - len(selected_images)]
+            selected_images += extra_imgs[: 3 - len(selected_images)]
 
         while len(selected_images) < 3:
             selected_images.append(selected_images[-1])

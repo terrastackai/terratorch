@@ -11,27 +11,42 @@ import pandas as pd
 import pyproj
 import rioxarray
 import torch
+from torchgeo.datasets import NonGeoDataset
 
 from terratorch.datasets.generic_multimodal_dataset import MultimodalToTensor
 from terratorch.datasets.transforms import MultimodalTransforms
 from terratorch.datasets.utils import default_transform, validate_bands
-from torchgeo.datasets import NonGeoDataset
 
 
 class CarbonFluxNonGeo(NonGeoDataset):
     """Dataset for [Carbon Flux](https://huggingface.co/datasets/ibm-nasa-geospatial/hls_merra2_gppFlux) regression from HLS images and MERRA data."""
 
     all_band_names = (
-        "BLUE", "GREEN", "RED", "NIR", "SWIR_1", "SWIR_2",
+        "BLUE",
+        "GREEN",
+        "RED",
+        "NIR",
+        "SWIR_1",
+        "SWIR_2",
     )
 
     rgb_bands = (
-        "RED", "GREEN", "BLUE",
+        "RED",
+        "GREEN",
+        "BLUE",
     )
 
     merra_var_names = (
-        "T2MIN", "T2MAX", "T2MEAN", "TSMDEWMEAN", "GWETROOT",
-        "LHLAND", "SHLAND", "SWLAND", "PARDFLAND", "PRECTOTLAND"
+        "T2MIN",
+        "T2MAX",
+        "T2MEAN",
+        "TSMDEWMEAN",
+        "GWETROOT",
+        "LHLAND",
+        "SHLAND",
+        "SWLAND",
+        "PARDFLAND",
+        "PRECTOTLAND",
     )
 
     splits = {"train": "train", "test": "test"}
@@ -50,7 +65,7 @@ class CarbonFluxNonGeo(NonGeoDataset):
         gpp_std: float | None = None,
         no_data_replace: float | None = 0.0001,
         use_metadata: bool = False,
-        modalities: Sequence[str] = ("image", "merra_vars")
+        modalities: Sequence[str] = ("image", "merra_vars"),
     ) -> None:
         """Initialize the CarbonFluxNonGeo dataset.
 
@@ -104,11 +119,13 @@ class CarbonFluxNonGeo(NonGeoDataset):
             image_path = image_dir / row["Chip"]
             merra_vars = row[list(self.merra_var_names)].values.astype(np.float32)
             gpp = row["GPP"]
-            self.samples.append({
-                "image_path": str(image_path),
-                "merra_vars": merra_vars,
-                "gpp": gpp,
-            })
+            self.samples.append(
+                {
+                    "image_path": str(image_path),
+                    "merra_vars": merra_vars,
+                    "gpp": gpp,
+                }
+            )
 
         if gpp_mean is None or gpp_std is None:
             msg = "Mean and standard deviation for GPP must be provided."
@@ -123,8 +140,7 @@ class CarbonFluxNonGeo(NonGeoDataset):
         if transform is None:
             self.transform = MultimodalToTensor(self.modalities)
         else:
-            transform = {m: transform[m] if m in transform else default_transform
-                for m in self.modalities}
+            transform = {m: transform[m] if m in transform else default_transform for m in self.modalities}
             self.transform = MultimodalTransforms(transform, shared=False)
 
     def __len__(self) -> int:
@@ -187,7 +203,7 @@ class CarbonFluxNonGeo(NonGeoDataset):
 
         image = image.to_numpy()  # (C, H, W)
         image = image[self.band_indices, ...]
-        image = np.moveaxis(image, 0, -1) # (H, W, C)
+        image = np.moveaxis(image, 0, -1)  # (H, W, C)
 
         merra_vars = np.array(sample["merra_vars"])
         target = np.array(sample["gpp"])
@@ -201,10 +217,7 @@ class CarbonFluxNonGeo(NonGeoDataset):
         if self.transform:
             output = self.transform(output)
 
-        output = {
-            "image": {m: output[m] for m in self.modalities if m in output},
-            "mask": target_norm
-        }
+        output = {"image": {m: output[m] for m in self.modalities if m in output}, "mask": target_norm}
         if self.use_metadata:
             output["location_coords"] = location_coords
             output["temporal_coords"] = temporal_coords

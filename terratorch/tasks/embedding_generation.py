@@ -1,25 +1,27 @@
-from pathlib import Path
-import warnings
-import logging
 import json
+import logging
+import warnings
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from pathlib import Path
 
 import geopandas as gpd
-import pandas as pd
 import numpy as np
-import torch
+import pandas as pd
 import rasterio
-from rasterio.transform import from_bounds, Affine
+import torch
 from rasterio.errors import NotGeoreferencedWarning
-from concurrent.futures import ThreadPoolExecutor
+from rasterio.transform import Affine, from_bounds
 from shapely.geometry import box
+
+from terratorch.registry import MODEL_FACTORY_REGISTRY
 from terratorch.tasks.base_task import TerraTorchTask
 from terratorch.tasks.utils import bounds_from_transform, infer_transform_and_bounds
-from terratorch.registry import MODEL_FACTORY_REGISTRY
 
 warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
 warnings.simplefilter("once", UserWarning)
 logger = logging.getLogger("EmbeddingGenerationTask")
+
 
 class EmbeddingGenerationTask(TerraTorchTask):
     """
@@ -27,17 +29,17 @@ class EmbeddingGenerationTask(TerraTorchTask):
     """
 
     def __init__(
-            self,
-            model_args: dict,
-            output_dir: str = "embeddings",
-            embed_file_key: str = "filename",
-            layers: list[int] = [-1],
-            output_format: str = "tiff",
-            has_cls: bool = False,
-            embedding_pooling: str | None = None,
-            num_workers: int = 4,
-            pixel_size: float = 10.0,
-            freeze_backbone = True
+        self,
+        model_args: dict,
+        output_dir: str = "embeddings",
+        embed_file_key: str = "filename",
+        layers: list[int] = [-1],
+        output_format: str = "tiff",
+        has_cls: bool = False,
+        embedding_pooling: str | None = None,
+        num_workers: int = 4,
+        pixel_size: float = 10.0,
+        freeze_backbone=True,
     ) -> None:
         """Constructor for EmbeddingGenerationTask
 
@@ -84,51 +86,51 @@ class EmbeddingGenerationTask(TerraTorchTask):
                 "automatic neck insertion and embedding aggregation are skipped. "
                 "This may cause incompatibilities with the chosen output format."
             )
-        else:
-            if embedding_pooling in (None, "None", "keep"):
-                model_args["necks"] = [
-                    {
-                        "name": "SelectIndices",
-                        "indices": self.embedding_indices
-                    }
-                ]
+        elif embedding_pooling in (None, "None", "keep"):
+            model_args["necks"] = [{"name": "SelectIndices", "indices": self.embedding_indices}]
 
-                if output_format == "tiff":
-                    neck_cfg = {
-                        "name": "ReshapeTokensToImage",
-                        "remove_cls_token": self.has_cls,
-                    }
-
-                    if model_args.get("backbone_use_temporal", False) and model_args.get("backbone_temporal_pooling", 'mean') == "keep":
-                        neck_cfg["temporal_inputs"] = True
-
-                    model_args["necks"].append(neck_cfg)
-                    logger.info(
-                        "GeoTIFF selected; 2D token embeddings (ViT) will be reshaped to "
-                        "[C, sqrt(num_tokens), sqrt(num_tokens)] after dropping CLS if present."
-                    )
-
-                elif self.output_format == "parquet_joint":
-                    logger.info(
-                        "Joint Parquet output supports only pooled (1D) embeddings, dense embeddings will be flattened. "
-                        "Please set an embedding pooling mode (e.g., mean, max, or cls) or choose a different output format."
-                    )
-            elif embedding_pooling in ["mean", "max", "min", "cls"]:
-                model_args["necks"] = []
+            if output_format == "tiff":
                 neck_cfg = {
-                        "name": "AggregateTokens",
-                        "pooling": embedding_pooling,
-                        "indices": self.embedding_indices,
-                        "drop_cls": has_cls
-                    }
-                if model_args.get("backbone_use_temporal", False) and model_args.get("backbone_temporal_pooling",'mean') == "keep":
-                    neck_cfg["temporal_inputs"] = True
-                model_args["necks"].append(neck_cfg)
+                    "name": "ReshapeTokensToImage",
+                    "remove_cls_token": self.has_cls,
+                }
 
-                if self.output_format == "tiff":
-                    warnings.warn("GeoTIFF output not recommended with embedding pooling, saves 1D vectors as (C,1,1).")
-            else:
-                raise ValueError(f"EmbeddingPooling {embedding_pooling} is not supported.")
+                if (
+                    model_args.get("backbone_use_temporal", False)
+                    and model_args.get("backbone_temporal_pooling", "mean") == "keep"
+                ):
+                    neck_cfg["temporal_inputs"] = True
+
+                model_args["necks"].append(neck_cfg)
+                logger.info(
+                    "GeoTIFF selected; 2D token embeddings (ViT) will be reshaped to "
+                    "[C, sqrt(num_tokens), sqrt(num_tokens)] after dropping CLS if present."
+                )
+
+            elif self.output_format == "parquet_joint":
+                logger.info(
+                    "Joint Parquet output supports only pooled (1D) embeddings, dense embeddings will be flattened. "
+                    "Please set an embedding pooling mode (e.g., mean, max, or cls) or choose a different output format."
+                )
+        elif embedding_pooling in ["mean", "max", "min", "cls"]:
+            model_args["necks"] = []
+            neck_cfg = {
+                "name": "AggregateTokens",
+                "pooling": embedding_pooling,
+                "indices": self.embedding_indices,
+                "drop_cls": has_cls,
+            }
+            if (
+                model_args.get("backbone_use_temporal", False)
+                and model_args.get("backbone_temporal_pooling", "mean") == "keep"
+            ):
+                neck_cfg["temporal_inputs"] = True
+            model_args["necks"].append(neck_cfg)
+
+            if self.output_format == "tiff":
+                warnings.warn("GeoTIFF output not recommended with embedding pooling, saves 1D vectors as (C,1,1).")
+        else:
+            raise ValueError(f"EmbeddingPooling {embedding_pooling} is not supported.")
 
         self.model_args = model_args
         self.aux_heads = []
@@ -139,11 +141,11 @@ class EmbeddingGenerationTask(TerraTorchTask):
         """Infer (B, T). For 5D assume [B, C, T, H, W] as standardized by TemporalWrapper."""
         if isinstance(x, dict):
             v = next(iter(x.values()))
-        else:   
+        else:
             v = x
         B = v.shape[0]
-        T = v.shape[2] if v.ndim == 5 else 1 
-        return B, T  
+        T = v.shape[2] if v.ndim == 5 else 1
+        return B, T
 
     def check_file_ids(
         self,
@@ -168,10 +170,9 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
         raise TypeError("`file_ids` must be a tensor/ndarray or a (nested) list/tuple")
 
-
     def save_configuration_summary(
-            self,
-            x: torch.Tensor | dict[str, torch.Tensor],
+        self,
+        x: torch.Tensor | dict[str, torch.Tensor],
     ) -> None:
         """
         Saves a JSON containing model, layer configuration, and output specs.
@@ -185,9 +186,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
             outputs = [outputs]
         n_outputs = len(outputs)
 
-        resolved_indices = [
-            (idx if idx >= 0 else n_outputs + idx) for idx in self.embedding_indices
-        ]
+        resolved_indices = [(idx if idx >= 0 else n_outputs + idx) for idx in self.embedding_indices]
 
         total_params = sum(p.numel() for p in self.model.parameters()) / 1e6
 
@@ -195,21 +194,20 @@ class EmbeddingGenerationTask(TerraTorchTask):
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "output_dir": str(self.output_path.absolute()),
             "output_format": self.output_format,
-            "backbone": self.model_args["backbone"] ,
+            "backbone": self.model_args["backbone"],
             "backbone_total_params_million": total_params,
             "has_cls": self.has_cls,
             "embedding_pooling": self.embedding_pooling,
             "model_layer_count": n_outputs,
             "n_layers_saved": len(self.embedding_indices),
             "layers": [
-                {   "output_folder_name": f"layer_{i:02d}",
+                {
+                    "output_folder_name": f"layer_{i:02d}",
                     "requested_index": folder,
                     "layer_number": res + 1,
-                    "layer_output_shape": list(outputs[res][0].shape)
+                    "layer_output_shape": list(outputs[res][0].shape),
                 }
-                for i, (folder, res) in enumerate(
-                    zip(self.embedding_indices, resolved_indices)
-                )
+                for i, (folder, res) in enumerate(zip(self.embedding_indices, resolved_indices))
             ],
         }
 
@@ -218,16 +216,15 @@ class EmbeddingGenerationTask(TerraTorchTask):
             with open(out_path, "w") as f:
                 json.dump(config_summary, f, indent=2)
             logger.info(f"Configuration summary saved to {out_path}")
-        except IOError as e:
+        except OSError as e:
             logger.error(f"Failed to write configuration summary: {e}")
 
         self._config_saved = True
 
-
     @torch.no_grad()
     def predict_step(self, batch: dict) -> None:
         embed_file_key = self.embed_file_key
-        x = batch['image']
+        x = batch["image"]
 
         # Extract input image size used for later georeferencing
         if self.input_shape is None:
@@ -243,9 +240,9 @@ class EmbeddingGenerationTask(TerraTorchTask):
             file_ids = batch.get(embed_file_key)
             if file_ids is None:
                 raise KeyError(f"Key '{embed_file_key}' not found in input dictionary.")
-            if 'metadata' in batch:
-                metadata = self.pull_metadata(batch['metadata'])
-            else:   
+            if "metadata" in batch:
+                metadata = self.pull_metadata(batch["metadata"])
+            else:
                 metadata = self.pull_metadata(batch)
 
         if isinstance(file_ids, dict):
@@ -284,40 +281,38 @@ class EmbeddingGenerationTask(TerraTorchTask):
         else:
             raise TypeError(f"Unsupported embedding type: {type(embedding)}. Expected Tensor or dict of Tensors.")
 
-    def pull_metadata(
-        self, 
-        data: dict
-    ) -> dict:
+    def pull_metadata(self, data: dict) -> dict:
         """Extract known metadata fields from `batch`, removing them from data and returning a metadata dict.
         Args:
             data (dict): Input data dictionary containing metadata.
         Returns:
             dict: Metadata dictionary.
         """
+
         def pop_first(d: dict, keys):
             for k in keys:
                 if k in d:
                     return d.pop(k)
             return None
-        
+
         # Aliases in priority order
         metadata_map = {
-            "file_id":       ("file_id",),
-            "product_id":    ("product_id",),
-            "time":          ("time", "time_", "timestamp"),
-            "grid_cell":     ("grid_cell",),
-            "grid_row_u":    ("grid_row_u",),
-            "grid_col_r":    ("grid_col_r",),
-            "geometry":      ("geometry",),
+            "file_id": ("file_id",),
+            "product_id": ("product_id",),
+            "time": ("time", "time_", "timestamp"),
+            "grid_cell": ("grid_cell",),
+            "grid_row_u": ("grid_row_u",),
+            "grid_col_r": ("grid_col_r",),
+            "geometry": ("geometry",),
             "utm_footprint": ("utm_footprint",),
-            "crs":           ("crs", "utm_crs"),
-            "pixel_bbox":    ("pixel_bbox",),
-            "bounds":        ("bounds",),
-            "geotransform":  ("geotransform",),
-            "raster_shape":  ("raster_shape",),
-            "center_lat":    ("center_lat", "centre_lat", "lat"),
-            "center_lon":    ("center_lon", "centre_lon", "lon"),
-        } 
+            "crs": ("crs", "utm_crs"),
+            "pixel_bbox": ("pixel_bbox",),
+            "bounds": ("bounds",),
+            "geotransform": ("geotransform",),
+            "raster_shape": ("raster_shape",),
+            "center_lat": ("center_lat", "centre_lat", "lat"),
+            "center_lon": ("center_lon", "centre_lon", "lon"),
+        }
 
         metadata = {}
 
@@ -325,17 +320,17 @@ class EmbeddingGenerationTask(TerraTorchTask):
             value = pop_first(data, aliases)
             if value is not None:
                 metadata[key] = value
-        
+
         return metadata
 
     def write_batch(
-            self,
-            embedding: torch.Tensor,
-            file_ids: list[str],
-            metadata: dict,
-            dir_path: Path,
-    ) -> None:  
-        """" Write a batch (optionally with timesteps) to GeoTIFF/GeoParquet."""
+        self,
+        embedding: torch.Tensor,
+        file_ids: list[str],
+        metadata: dict,
+        dir_path: Path,
+    ) -> None:
+        """ " Write a batch (optionally with timesteps) to GeoTIFF/GeoParquet."""
         dir_path.mkdir(parents=True, exist_ok=True)
 
         is_temporal = isinstance(file_ids[0], (list, tuple, np.ndarray))
@@ -357,7 +352,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
         else:
             raise ValueError(f"Unsupported output_format: {self.output_format!r}")
 
-        max_workers = min(len(tasks), getattr(self, "num_workers"))
+        max_workers = min(len(tasks), self.num_workers)
 
         def write_one(task):
             arr, filename, meta = task
@@ -387,13 +382,11 @@ class EmbeddingGenerationTask(TerraTorchTask):
                 v = v.detach().cpu().numpy()
             md[k] = v
 
-        def _select_meta(v, b: int, t: int | None, B: int, T: int | None) :
+        def _select_meta(v, b: int, t: int | None, B: int, T: int | None):
             if isinstance(v, (list, tuple)):
                 if len(v) == B:
                     vb = v[b]
-                    if (t is not None and T is not None
-                            and isinstance(vb, (list, tuple))
-                            and len(vb) == T):
+                    if t is not None and T is not None and isinstance(vb, (list, tuple)) and len(vb) == T:
                         return vb[t]
                     return vb
                 return v
@@ -442,7 +435,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
         metadata: dict,
         dir_path: Path,
         suffix: str = "_embedding",
-        ) -> None:
+    ) -> None:
         """Write a single sample to GeoTIFF.
 
         Georeferencing priority (best -> fallback):
@@ -481,11 +474,13 @@ class EmbeddingGenerationTask(TerraTorchTask):
         if isinstance(raster_shape, np.ndarray):
             raster_shape = raster_shape.tolist()
 
-        if (crs is not None
-                and isinstance(geotransform, (list, tuple))
-                and len(geotransform) == 6
-                and isinstance(raster_shape, (list, tuple))
-                and len(raster_shape) == 2):
+        if (
+            crs is not None
+            and isinstance(geotransform, (list, tuple))
+            and len(geotransform) == 6
+            and isinstance(raster_shape, (list, tuple))
+            and len(raster_shape) == 2
+        ):
             x0, px, rx, y0, ry, py = [float(v) for v in geotransform]
             src_transform = Affine(px, rx, x0, ry, py, y0)
             src_h, src_w = int(raster_shape[0]), int(raster_shape[1])
@@ -523,12 +518,12 @@ class EmbeddingGenerationTask(TerraTorchTask):
             dst.update_tags(**{k: str(v) for k, v in metadata.items()})
 
     def write_parquet(
-            self,
-            arr: np.ndarray,
-            filename: str,
-            metadata: dict,
-            dir_path: Path,
-            suffix: str = "_embedding",
+        self,
+        arr: np.ndarray,
+        filename: str,
+        metadata: dict,
+        dir_path: Path,
+        suffix: str = "_embedding",
     ) -> None:
         """Write a single sample to GeoParquet.
 
@@ -566,10 +561,12 @@ class EmbeddingGenerationTask(TerraTorchTask):
             if isinstance(raster_shape, np.ndarray):
                 raster_shape = raster_shape.tolist()
 
-            if (isinstance(geotransform, (list, tuple))
-                    and len(geotransform) == 6
-                    and isinstance(raster_shape, (list, tuple))
-                    and len(raster_shape) == 2):
+            if (
+                isinstance(geotransform, (list, tuple))
+                and len(geotransform) == 6
+                and isinstance(raster_shape, (list, tuple))
+                and len(raster_shape) == 2
+            ):
                 x0, px, rx, y0, ry, py = [float(v) for v in geotransform]
                 src_transform = Affine(px, rx, x0, ry, py, y0)
                 src_h, src_w = int(raster_shape[0]), int(raster_shape[1])
@@ -601,89 +598,86 @@ class EmbeddingGenerationTask(TerraTorchTask):
             pd.DataFrame([row]).to_parquet(out_path, index=False)
 
     def write_parquet_batch(
-            self,
-            emb_np: np.ndarray,
-            file_ids: list[str],
-            metadata: dict,
-            is_temporal: bool,
-            dir_path: Path,
-        ) -> None:
-            """Write a batch of samples to GeoParquet."""
-            dir_path.mkdir(parents=True, exist_ok=True)
+        self,
+        emb_np: np.ndarray,
+        file_ids: list[str],
+        metadata: dict,
+        is_temporal: bool,
+        dir_path: Path,
+    ) -> None:
+        """Write a batch of samples to GeoParquet."""
+        dir_path.mkdir(parents=True, exist_ok=True)
 
-            # In the case of temporal data, use 'iter_samples' logic to flatten the temporal and batch dimension
-            if is_temporal:
-                tasks = list(self.iter_samples(emb_np, file_ids, metadata, is_temporal))
-                filenames, emb_list = [], []
-                meta_cols = {k: [] for k in metadata.keys()}
+        # In the case of temporal data, use 'iter_samples' logic to flatten the temporal and batch dimension
+        if is_temporal:
+            tasks = list(self.iter_samples(emb_np, file_ids, metadata, is_temporal))
+            filenames, emb_list = [], []
+            meta_cols = {k: [] for k in metadata.keys()}
 
-                for arr, filename, meta in tasks:
-                    filenames.append(Path(filename).stem)
-                    emb_list.append(arr.reshape(-1))
-                    for k, v in meta.items():
-                        meta_cols[k].append(v)
-                emb_2d = np.asarray(emb_list, np.float32)
+            for arr, filename, meta in tasks:
+                filenames.append(Path(filename).stem)
+                emb_list.append(arr.reshape(-1))
+                for k, v in meta.items():
+                    meta_cols[k].append(v)
+            emb_2d = np.asarray(emb_list, np.float32)
 
-            # In the non-temporal case we can directly treat batch dimension as row dimension
-            else:
-                filenames = [Path(f).stem for f in file_ids]
-                n = len(filenames)
-                meta_cols = {}
-                for k, v in (metadata or {}).items():
-                    if hasattr(v, "detach"):
-                        v = v.detach().cpu().numpy()
-
-                    if isinstance(v, np.ndarray):
-                        v = v.item() if v.ndim == 0 else v.tolist()
-                    elif hasattr(v, "item"):
-                        v = v.item()
-
-                    if isinstance(v, list) and len(v) == n:
-                        meta_cols[k] = v
-                    else:
-                        meta_cols[k] = [v] * n # Scalar / global metadata -> broadcast
-
-                emb_2d = emb_np.reshape(emb_np.shape[0], -1)
-
+        # In the non-temporal case we can directly treat batch dimension as row dimension
+        else:
+            filenames = [Path(f).stem for f in file_ids]
             n = len(filenames)
-            if emb_2d.ndim != 2 or emb_2d.shape[0] != n:
-                raise ValueError(f"Expected aggregated embedding (n,d) with n=batch_size. Got {emb_2d.shape}, n={n}")
+            meta_cols = {}
+            for k, v in (metadata or {}).items():
+                if hasattr(v, "detach"):
+                    v = v.detach().cpu().numpy()
 
-            df = pd.DataFrame(meta_cols)
-            df["file_id"] = filenames
-            df["embedding"] = [row.tolist() for row in emb_2d]
+                if isinstance(v, np.ndarray):
+                    v = v.item() if v.ndim == 0 else v.tolist()
+                elif hasattr(v, "item"):
+                    v = v.item()
 
-            if "crs" in df.columns:
-                # Ensure single CRS value for a valid GeoDataFrame
-                if df["crs"].notna().any() and (df["crs"].nunique(dropna=True) == 1):
-                    crs = df["crs"].iloc[0]
+                if isinstance(v, list) and len(v) == n:
+                    meta_cols[k] = v
                 else:
-                    crs = None
-                    logger.info(
-                        "Input CRS values are missing or inconsistent across rows; "
-                        "writing non-georeferenced Parquet instead."
-                    )
+                    meta_cols[k] = [v] * n  # Scalar / global metadata -> broadcast
+
+            emb_2d = emb_np.reshape(emb_np.shape[0], -1)
+
+        n = len(filenames)
+        if emb_2d.ndim != 2 or emb_2d.shape[0] != n:
+            raise ValueError(f"Expected aggregated embedding (n,d) with n=batch_size. Got {emb_2d.shape}, n={n}")
+
+        df = pd.DataFrame(meta_cols)
+        df["file_id"] = filenames
+        df["embedding"] = [row.tolist() for row in emb_2d]
+
+        if "crs" in df.columns:
+            # Ensure single CRS value for a valid GeoDataFrame
+            if df["crs"].notna().any() and (df["crs"].nunique(dropna=True) == 1):
+                crs = df["crs"].iloc[0]
             else:
                 crs = None
+                logger.info(
+                    "Input CRS values are missing or inconsistent across rows; "
+                    "writing non-georeferenced Parquet instead."
+                )
+        else:
+            crs = None
 
-            if (crs is not None
-                    and "bounds" in df.columns
-                    and df["bounds"].notna().all()):
+        if crs is not None and "bounds" in df.columns and df["bounds"].notna().all():
+            df["geometry"] = [box(*map(float, b)) for b in df["bounds"]]
+            out = gpd.GeoDataFrame(df, geometry="geometry", crs=df["crs"].iloc[0])
+        else:
+            out = df
 
-                    df["geometry"] = [box(*map(float, b)) for b in df["bounds"]]
-                    out = gpd.GeoDataFrame(df, geometry="geometry", crs=df["crs"].iloc[0])
-            else:
-                out = df
+        # For joint geoparquet we collect info on the written part files and paths
+        l_key = dir_path.as_posix().split("layer_")[1]
+        if self._part_idx[l_key] is None:
+            self._part_idx[l_key] = 0
+            self._part_dir[l_key] = dir_path
 
-            # For joint geoparquet we collect info on the written part files and paths
-            l_key = dir_path.as_posix().split("layer_")[1]
-            if self._part_idx[l_key] is None:
-                self._part_idx[l_key] = 0
-                self._part_dir[l_key] = dir_path
-
-            part_path = dir_path / f"embeddings_part_{self._part_idx[l_key]:06d}.parquet"
-            self._part_idx[l_key] += 1
-            out.to_parquet(part_path, index=False)
+        part_path = dir_path / f"embeddings_part_{self._part_idx[l_key]:06d}.parquet"
+        self._part_idx[l_key] += 1
+        out.to_parquet(part_path, index=False)
 
     def join_parquet_files(self) -> None:
         """Join part parquet files into one final parquet file."""
@@ -694,7 +688,8 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
             if not parts:
                 raise FileNotFoundError(
-                    f"No part files found in {self._part_dir[l_key]} matching embeddings_part_*.parquet")
+                    f"No part files found in {self._part_dir[l_key]} matching embeddings_part_*.parquet"
+                )
 
             is_geo = False
             first_gdf = None
@@ -762,13 +757,12 @@ class EmbeddingGenerationTask(TerraTorchTask):
                     pass
 
     def write_neuco_parquet_batch(
-            self,
-            emb_np: np.ndarray,  # (B, D)
-            file_ids: list[str],  # length B
-            dir_path: Path,
+        self,
+        emb_np: np.ndarray,  # (B, D)
+        file_ids: list[str],  # length B
+        dir_path: Path,
     ) -> None:
-        """Append/ Create NeuCo-Bench CSV (id + dim columns).
-        """
+        """Append/ Create NeuCo-Bench CSV (id + dim columns)."""
         dir_path.mkdir(parents=True, exist_ok=True)
 
         if emb_np.ndim != 2:

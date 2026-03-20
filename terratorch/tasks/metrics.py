@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torchmetrics import Metric
 
+
 class BoundaryMeanIoU(Metric):
     """Boundary mIoU for multiclass segmentation.
 
@@ -13,16 +14,17 @@ class BoundaryMeanIoU(Metric):
     Cheng, B., Girshick, R., Dollár, P., Berg, A. C., & Kirillov, A. (2021). Boundary IoU: Improving object-centric
     image segmentation evaluation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition.
     """
+
     full_state_update = False
 
     def __init__(
         self,
         num_classes: int,
-        thickness: int = 2,                # boundary band half-width in pixels
+        thickness: int = 2,  # boundary band half-width in pixels
         ignore_index: int | None = None,
-        average: str = "macro",            # "macro" or "micro"
+        average: str = "macro",  # "macro" or "micro"
         include_background: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

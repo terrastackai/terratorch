@@ -15,15 +15,15 @@
 import math
 import random
 import warnings
+from functools import partial
 
 import torch
 from torch import nn
-from functools import partial
 
 from .encoder_embeddings import ImageEncoderEmbedding, ImageTokenEncoderEmbedding
-from .tm_utils import Block, LayerNorm
 from .modality_info import MODALITY_INFO
 from .terramind import build_modality_embeddings, build_tokenizer
+from .tm_utils import Block, LayerNorm
 
 
 class TerraMindViT(nn.Module):
@@ -59,11 +59,12 @@ class TerraMindViT(nn.Module):
         tokenizer_dict (dict): Dictionary of tokenizers.
         pretrained (bool): If True, loads pretrained tokenizers.
     """
+
     def __init__(
         self,
         img_size: int = 224,
         modalities: list | dict[str, int | nn.Module] | None = None,
-        merge_method: str | None = 'mean',
+        merge_method: str | None = "mean",
         patch_size: int = 16,
         in_chans: int = 3,
         dim: int = 768,
@@ -90,41 +91,59 @@ class TerraMindViT(nn.Module):
 
         if modalities is None or len(modalities) == 0:
             # Init new image modality
-            modalities = [{'image': in_chans}]
+            modalities = [{"image": in_chans}]
         elif isinstance(modalities, dict):
             modalities = [modalities]
         elif not isinstance(modalities, list):
-            raise ValueError(f'Modalities must be None, a list of modality keys or a dict with ints/embedding layers.')
+            raise ValueError("Modalities must be None, a list of modality keys or a dict with ints/embedding layers.")
 
         # Build embedding layers for all defined modalities
-        mod_embeddings, mod_name_mapping = build_modality_embeddings(MODALITY_INFO, modalities, img_size=img_size,
-                                                                     dim=dim, patch_size=patch_size)
+        mod_embeddings, mod_name_mapping = build_modality_embeddings(
+            MODALITY_INFO, modalities, img_size=img_size, dim=dim, patch_size=patch_size
+        )
         self.encoder_embeddings = nn.ModuleDict(mod_embeddings)
         self.mod_name_mapping = mod_name_mapping
         self.modalities = list(mod_name_mapping.keys())  # Further code expects list
 
         self.img_size = img_size
         self.merge_method = merge_method
-        self.image_modalities = [key for key, value in self.encoder_embeddings.items()
-             if isinstance(value, ImageEncoderEmbedding) or isinstance(value, ImageTokenEncoderEmbedding)]
+        self.image_modalities = [
+            key
+            for key, value in self.encoder_embeddings.items()
+            if isinstance(value, ImageEncoderEmbedding) or isinstance(value, ImageTokenEncoderEmbedding)
+        ]
         self.modality_drop_rate = modality_drop_rate
         assert 0 <= self.modality_drop_rate <= 1, "modality_drop_rate must be in [0, 1]"
         # New learned parameter for handling missing modalities
-        if self.merge_method == 'concat':
+        if self.merge_method == "concat":
             self.missing_mod_token = nn.Parameter(torch.Tensor(dim))
 
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, encoder_depth)]
 
-        self.encoder = nn.ModuleList([
-            Block(dim=dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, proj_bias=proj_bias,
-                  mlp_bias=mlp_bias, drop_path=dpr[i], drop=drop_rate, attn_drop=attn_drop_rate, act_layer=act_layer,
-                  norm_layer=norm_layer, gated_mlp=gated_mlp, qk_norm=qk_norm)
-            for i in range(encoder_depth)
-        ])
+        self.encoder = nn.ModuleList(
+            [
+                Block(
+                    dim=dim,
+                    num_heads=num_heads,
+                    mlp_ratio=mlp_ratio,
+                    qkv_bias=qkv_bias,
+                    proj_bias=proj_bias,
+                    mlp_bias=mlp_bias,
+                    drop_path=dpr[i],
+                    drop=drop_rate,
+                    attn_drop=attn_drop_rate,
+                    act_layer=act_layer,
+                    norm_layer=norm_layer,
+                    gated_mlp=gated_mlp,
+                    qk_norm=qk_norm,
+                )
+                for i in range(encoder_depth)
+            ]
+        )
 
         # Needed for terratorch decoders
-        if merge_method == 'concat':
+        if merge_method == "concat":
             self.out_channels = [dim * len(self.image_modalities) for i in range(encoder_depth)]
         else:
             self.out_channels = [dim for i in range(encoder_depth)]
@@ -141,9 +160,11 @@ class TerraMindViT(nn.Module):
 
         # Init optional tokenizers
         if tokenizer_dict is not None:
-            self.tokenizer = build_tokenizer(tokenizer_dict=tokenizer_dict,
-                                             input_modalities=list(self.encoder_embeddings.keys()),
-                                             pretrained=pretrained)
+            self.tokenizer = build_tokenizer(
+                tokenizer_dict=tokenizer_dict,
+                input_modalities=list(self.encoder_embeddings.keys()),
+                pretrained=pretrained,
+            )
         else:
             self.tokenizer = {}
 
@@ -159,13 +180,13 @@ class TerraMindViT(nn.Module):
                 continue
             # Linear
             elif isinstance(m, nn.Linear):
-                if 'qkv' in name:
+                if "qkv" in name:
                     # treat the weights of Q, K, V separately
-                    val = math.sqrt(6. / float(m.weight.shape[0] // 3 + m.weight.shape[1]))
+                    val = math.sqrt(6.0 / float(m.weight.shape[0] // 3 + m.weight.shape[1]))
                     nn.init.uniform_(m.weight, -val, val)
-                elif 'kv' in name:
+                elif "kv" in name:
                     # treat the weights of K, V separately
-                    val = math.sqrt(6. / float(m.weight.shape[0] // 2 + m.weight.shape[1]))
+                    val = math.sqrt(6.0 / float(m.weight.shape[0] // 2 + m.weight.shape[1]))
                     nn.init.uniform_(m.weight, -val, val)
                 else:
                     nn.init.xavier_uniform_(m.weight)
@@ -181,7 +202,7 @@ class TerraMindViT(nn.Module):
                 nn.init.normal_(m.weight, std=0.02)
             # Conv2d
             elif isinstance(m, nn.Conv2d):
-                if '.proj' in name:
+                if ".proj" in name:
                     # From MAE, initialize projection like nn.Linear (instead of nn.Conv2d)
                     w = m.weight.data
                     nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
@@ -191,9 +212,9 @@ class TerraMindViT(nn.Module):
         no_wd_set = set()
 
         for mod, emb_module in self.encoder_embeddings.items():
-            if hasattr(emb_module, 'no_weight_decay'):
+            if hasattr(emb_module, "no_weight_decay"):
                 to_skip = emb_module.no_weight_decay()
-                to_skip = set([f'encoder_embeddings.{mod}.{name}' for name in to_skip])
+                to_skip = set([f"encoder_embeddings.{mod}.{name}" for name in to_skip])
                 no_wd_set = no_wd_set | to_skip
 
         return no_wd_set
@@ -216,7 +237,7 @@ class TerraMindViT(nn.Module):
             d = {self.modalities[0]: d}
         elif d is None or len(d) == 0:
             d = {}
-            if not len(kwargs):
+            if not kwargs:
                 raise ValueError("No input provided.")
 
         # Add additional keyword args to input dict
@@ -253,8 +274,8 @@ class TerraMindViT(nn.Module):
 
             mod_dict = self.encoder_embeddings[self.mod_name_mapping[mod]](tensor)
             # Add embeddings to patchified data
-            x.append(mod_dict['x'] + mod_dict['emb'])
-            num_tokens.append(mod_dict['x'].shape[-2])
+            x.append(mod_dict["x"] + mod_dict["emb"])
+            num_tokens.append(mod_dict["x"].shape[-2])
             image_mod.append(self.mod_name_mapping[mod] in self.image_modalities)
 
         # Concatenate along token dim
@@ -264,7 +285,7 @@ class TerraMindViT(nn.Module):
             register_tokens = self.register_tokens.repeat((x.shape[0], 1, 1))
             # We add register tokens at the beginning of the sequence
             x = torch.cat([register_tokens, x], dim=1)
-            if self.merge_method == 'dict':
+            if self.merge_method == "dict":
                 # Return register tokens as additional modality
                 d_mod.insert(0, "register_tokens")
                 num_tokens.insert(0, self.num_register_tokens)
@@ -280,22 +301,22 @@ class TerraMindViT(nn.Module):
         def _unstack_image_modalities(x):
             if self.num_register_tokens:
                 # Remove register tokens
-                x = x[:, self.num_register_tokens:]
+                x = x[:, self.num_register_tokens :]
             x = torch.split(x, num_tokens, dim=1)  # Split tokens by modality
             x = [m for m, keep in zip(x, image_mod) if keep]  # Drop sequence modalities
             x = torch.stack(x, dim=1)  # (B, M, N, D)
             return x
 
         # Merge tokens from different modalities
-        if self.merge_method == 'mean':
+        if self.merge_method == "mean":
             out = [_unstack_image_modalities(x) for x in out]
             out = [x.mean(dim=1) for x in out]
 
-        elif self.merge_method == 'max':
+        elif self.merge_method == "max":
             out = [_unstack_image_modalities(x) for x in out]
             out = [x.max(dim=1)[0] for x in out]
 
-        elif self.merge_method == 'concat':
+        elif self.merge_method == "concat":
             out = [_unstack_image_modalities(x) for x in out]
             if len(d) < len(self.image_modalities):
                 # Handle missing modalities with missing_mod_token
@@ -305,14 +326,16 @@ class TerraMindViT(nn.Module):
             # Concat along embedding dim
             out = [torch.cat(x.unbind(dim=1), dim=-1) for x in out]
 
-        elif self.merge_method == 'dict':
+        elif self.merge_method == "dict":
             out = [torch.split(x, num_tokens, dim=1) for x in out]
             out = [{mod: x[i] for i, mod in enumerate(d_mod)} for x in out]
 
         elif self.merge_method is None:
             pass  # Do nothing
         else:
-            raise NotImplementedError(f'Merging method {self.merge_method} is not implemented. '
-                                      f'Select one of mean, max, concat, dict, or None.')
+            raise NotImplementedError(
+                f"Merging method {self.merge_method} is not implemented. "
+                f"Select one of mean, max, concat, dict, or None."
+            )
 
         return out

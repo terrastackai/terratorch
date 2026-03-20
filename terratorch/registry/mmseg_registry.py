@@ -1,8 +1,8 @@
 import importlib
 import inspect
 import logging
-from collections.abc import Callable, Set
 import warnings
+from collections.abc import Callable, Set
 
 from torch import nn
 
@@ -68,9 +68,11 @@ class MMSegRegistry(Set):
         if "num_classes" not in constructor_kwargs:
             msg = "num_classes is a required argument for mmseg decoders. If you are using an mmseg decoder for a regression task please include num_classes=1."
             raise ValueError(msg)
-        
+
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=UserWarning) # dont worry about warnings related to loss. we dont use that component.
+            warnings.simplefilter(
+                "ignore", category=UserWarning
+            )  # dont worry about warnings related to loss. we dont use that component.
             decoder = decoder(*constructor_args, in_channels=in_channels, **constructor_kwargs)
         return MMsegDecoderWrapper(decoder)
 

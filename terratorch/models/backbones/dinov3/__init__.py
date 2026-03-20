@@ -10,4 +10,3 @@
 # from .dinov3_wrapper import dinov3_convnext_small
 # from .dinov3_wrapper import dinov3_convnext_tiny
 from terratorch.models.backbones.dinov3 import dinov3_wrapper
-

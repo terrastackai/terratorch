@@ -3,8 +3,8 @@ from typing import Any
 
 import albumentations as A
 import kornia.augmentation as K  # noqa: N812
-from torchgeo.datamodules import NonGeoDataModule
 from kornia.augmentation import AugmentationSequential
+from torchgeo.datamodules import NonGeoDataModule
 
 from terratorch.datamodules.generic_multimodal_data_module import wrap_in_compose_is_list
 from terratorch.datasets import Landslide4SenseNonGeo
@@ -85,9 +85,7 @@ class Landslide4SenseNonGeoDataModule(NonGeoDataModule):
         self.val_transform = wrap_in_compose_is_list(val_transform)
         self.test_transform = wrap_in_compose_is_list(test_transform)
         self.predict_transform = wrap_in_compose_is_list(predict_transform)
-        self.aug = (
-            AugmentationSequential(K.Normalize(self.means, self.stds), data_keys=None) if aug is None else aug
-        )
+        self.aug = AugmentationSequential(K.Normalize(self.means, self.stds), data_keys=None) if aug is None else aug
 
     def setup(self, stage: str) -> None:
         """Set up datasets.
@@ -97,29 +95,17 @@ class Landslide4SenseNonGeoDataModule(NonGeoDataModule):
         """
         if stage in ["fit"]:
             self.train_dataset = self.dataset_class(
-                split="train",
-                data_root=self.data_root,
-                transform=self.train_transform,
-                bands=self.bands
+                split="train", data_root=self.data_root, transform=self.train_transform, bands=self.bands
             )
         if stage in ["fit", "validate"]:
             self.val_dataset = self.dataset_class(
-                split="val",
-                data_root=self.data_root,
-                transform=self.val_transform,
-                bands=self.bands
+                split="val", data_root=self.data_root, transform=self.val_transform, bands=self.bands
             )
         if stage in ["test"]:
             self.test_dataset = self.dataset_class(
-                split="test",
-                data_root=self.data_root,
-                transform=self.test_transform,
-                bands=self.bands
+                split="test", data_root=self.data_root, transform=self.test_transform, bands=self.bands
             )
         if stage in ["predict"]:
             self.predict_dataset = self.dataset_class(
-                split="test",
-                data_root=self.data_root,
-                transform=self.predict_transform,
-                bands=self.bands
+                split="test", data_root=self.data_root, transform=self.predict_transform, bands=self.bands
             )

@@ -121,8 +121,8 @@ if wxc_present:
 if geobench_v2_present:
     __all__.extend(
         [
-            "GeoBenchV2SegmentationDataModule",
-            "GeoBenchV2ObjectDetectionDataModule",
             "GeoBenchV2ClassificationDataModule",
+            "GeoBenchV2ObjectDetectionDataModule",
+            "GeoBenchV2SegmentationDataModule",
         ]
     )

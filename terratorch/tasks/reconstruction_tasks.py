@@ -1,9 +1,9 @@
 """This module contains pre-training tasks."""
 
-import torch
 import matplotlib.pyplot as plt
-from torch import nn
+import torch
 from lightning.pytorch.callbacks import Callback
+from torch import nn
 from torchgeo.datasets.utils import unbind_samples
 from torchgeo.trainers import BaseTask
 from torchmetrics import MeanAbsoluteError, MeanSquaredError, MetricCollection
@@ -11,8 +11,8 @@ from torchmetrics import MeanAbsoluteError, MeanSquaredError, MetricCollection
 from terratorch.models.model import Model, ReconstructionOutput
 from terratorch.registry import MODEL_FACTORY_REGISTRY
 from terratorch.tasks.loss_handler import LossHandler
-from terratorch.tasks.tiled_inference import TiledInferenceParameters, tiled_inference
 from terratorch.tasks.regression_tasks import IgnoreIndexLossWrapper, IgnoreIndexMetricWrapper, RootLossWrapper
+from terratorch.tasks.tiled_inference import TiledInferenceParameters, tiled_inference
 
 BATCH_IDX_FOR_VALIDATION_PLOTTING = 10
 
@@ -23,22 +23,22 @@ class ReconstructionTask(BaseTask):
     """
 
     def __init__(
-            self,
-            model_factory: str,
-            model_args: dict,
-            loss: str = "mse",
-            ignore_index: int | float = torch.nan,
-            masked_metric: bool = True,
-            lr: float = 0.001,
-            optimizer: str | None = None,
-            optimizer_hparams: dict | None = None,
-            scheduler: str | None = None,
-            scheduler_hparams: dict | None = None,
-            freeze_encoder: bool = False,  # noqa: FBT001, FBT002
-            freeze_decoder: bool = False,  # noqa: FBT001, FBT002
-            plot_on_val: bool | int = 10,
-            tiled_inference_parameters: dict | None = None,
-            modalities: list[str] | None = None
+        self,
+        model_factory: str,
+        model_args: dict,
+        loss: str = "mse",
+        ignore_index: int | float = torch.nan,
+        masked_metric: bool = True,
+        lr: float = 0.001,
+        optimizer: str | None = None,
+        optimizer_hparams: dict | None = None,
+        scheduler: str | None = None,
+        scheduler_hparams: dict | None = None,
+        freeze_encoder: bool = False,  # noqa: FBT001, FBT002
+        freeze_decoder: bool = False,  # noqa: FBT001, FBT002
+        plot_on_val: bool | int = 10,
+        tiled_inference_parameters: dict | None = None,
+        modalities: list[str] | None = None,
     ) -> None:
         """Constructor
 
@@ -82,10 +82,10 @@ class ReconstructionTask(BaseTask):
         self.ignore_index = ignore_index
         self.masked_metric = masked_metric
         super().__init__()
-        self.train_loss_handler = LossHandler('train/')
-        self.val_loss_handler = LossHandler('val/')
-        self.test_loss_handler = LossHandler('test/')
-        self.monitor = f"val/loss"
+        self.train_loss_handler = LossHandler("train/")
+        self.val_loss_handler = LossHandler("val/")
+        self.test_loss_handler = LossHandler("test/")
+        self.monitor = "val/loss"
         self.plot_on_val = int(plot_on_val)
 
     # overwrite early stopping
@@ -114,21 +114,29 @@ class ReconstructionTask(BaseTask):
                 "MAE": MeanAbsoluteError(),
             }
 
-            return {name: IgnoreIndexMetricWrapper(metric, ignore_index=self.hparams["ignore_index"])
-                    for name, metric in metrics.items()}
+            return {
+                name: IgnoreIndexMetricWrapper(metric, ignore_index=self.hparams["ignore_index"])
+                for name, metric in metrics.items()
+            }
 
         if self.modalities:
             self.train_metrics = nn.ModuleDict(
-                {modality: MetricCollection(instantiate_metrics(), prefix=f"train/{modality}_")
-                 for modality in self.modalities}
+                {
+                    modality: MetricCollection(instantiate_metrics(), prefix=f"train/{modality}_")
+                    for modality in self.modalities
+                }
             )
             self.val_metrics = nn.ModuleDict(
-                {modality: MetricCollection(instantiate_metrics(), prefix=f"val/{modality}_")
-                 for modality in self.modalities}
+                {
+                    modality: MetricCollection(instantiate_metrics(), prefix=f"val/{modality}_")
+                    for modality in self.modalities
+                }
             )
             self.test_metrics = nn.ModuleDict(
-                {modality: MetricCollection(instantiate_metrics(), prefix=f"test/{modality}_")
-                 for modality in self.modalities}
+                {
+                    modality: MetricCollection(instantiate_metrics(), prefix=f"test/{modality}_")
+                    for modality in self.modalities
+                }
             )
         else:
             self.train_metrics = MetricCollection(instantiate_metrics(), prefix="train/")
@@ -253,8 +261,10 @@ class ReconstructionTask(BaseTask):
 
         if isinstance(x, dict):
             if not isinstance(self.val_metrics, nn.ModuleDict):
-                raise ValueError(f'Multimodal data provided but no image modalities. '
-                                 f'Please provide modalities (list of str) to the ReconstructionTask.')
+                raise ValueError(
+                    "Multimodal data provided but no image modalities. "
+                    "Please provide modalities (list of str) to the ReconstructionTask."
+                )
             # Multimodal data
             for modality in x.keys():
                 if modality in self.val_metrics:
@@ -268,7 +278,7 @@ class ReconstructionTask(BaseTask):
                 datamodule = self.trainer.datamodule
                 if isinstance(batch["image"], dict):
                     # Multimodal input
-                    rgb_modality = getattr(datamodule, 'rgb_modality', None) or list(batch["image"].keys())[0]
+                    rgb_modality = getattr(datamodule, "rgb_modality", None) or list(batch["image"].keys())[0]
                     batch["image"] = batch["image"][rgb_modality]
                     batch["prediction"] = output.pred[rgb_modality].cpu()
                     if output.mask is not None:
@@ -276,7 +286,7 @@ class ReconstructionTask(BaseTask):
                 else:
                     batch["prediction"] = output.pred.cpu()
                     batch["mask"] = output.mask.cpu()
-                batch['image'] = batch['image'].cpu()
+                batch["image"] = batch["image"].cpu()
                 sample = unbind_samples(batch)[0]
                 fig = datamodule.val_dataset.plot(sample)
                 if fig:

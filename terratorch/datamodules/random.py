@@ -1,6 +1,7 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
 from lightning.pytorch import LightningDataModule
+from torch.utils.data import DataLoader, Dataset
+
 
 class RandomDataset(Dataset):
     def __init__(self, task: str, num_samples: int, input_shape, output_shape=None, num_classes: int = 10):
@@ -40,16 +41,21 @@ class RandomDataset(Dataset):
         else:
             raise ValueError(f"Unsupported task type: {self.task}")
 
-        output = {
-            "image": x,
-            "label": y
-        }
+        output = {"image": x, "label": y}
         return output
 
 
 class RandomDataModule(LightningDataModule):
-    def __init__(self, task: str = "classification", input_shape=(3, 64, 64), output_shape=None,
-                 batch_size=32, num_classes=10, train_samples=1000, val_samples=200):
+    def __init__(
+        self,
+        task: str = "classification",
+        input_shape=(3, 64, 64),
+        output_shape=None,
+        batch_size=32,
+        num_classes=10,
+        train_samples=1000,
+        val_samples=200,
+    ):
         super().__init__()
         self.task = task
         self.input_shape = input_shape
@@ -61,14 +67,18 @@ class RandomDataModule(LightningDataModule):
 
     def setup(self, stage=None):
         self.train_dataset = RandomDataset(
-            task=self.task, num_samples=self.train_samples,
-            input_shape=self.input_shape, output_shape=self.output_shape,
-            num_classes=self.num_classes
+            task=self.task,
+            num_samples=self.train_samples,
+            input_shape=self.input_shape,
+            output_shape=self.output_shape,
+            num_classes=self.num_classes,
         )
         self.val_dataset = RandomDataset(
-            task=self.task, num_samples=self.val_samples,
-            input_shape=self.input_shape, output_shape=self.output_shape,
-            num_classes=self.num_classes
+            task=self.task,
+            num_samples=self.val_samples,
+            input_shape=self.input_shape,
+            output_shape=self.output_shape,
+            num_classes=self.num_classes,
         )
 
     def train_dataloader(self):

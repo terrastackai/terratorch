@@ -1,8 +1,8 @@
-
 import logging
 import warnings
 from functools import partial
 from typing import Any
+
 import matplotlib.pyplot as plt
 import segmentation_models_pytorch as smp
 import torch
@@ -14,9 +14,9 @@ from torchmetrics.classification import MulticlassAccuracy, MulticlassF1Score, M
 from terratorch.models.model import AuxiliaryHead, ModelOutput
 from terratorch.registry import MODEL_FACTORY_REGISTRY
 from terratorch.tasks.base_task import TerraTorchTask
-from terratorch.tasks.loss_handler import LossHandler, CombinedLoss
-from terratorch.tasks.tiled_inference import tiled_inference
+from terratorch.tasks.loss_handler import CombinedLoss, LossHandler
 from terratorch.tasks.metrics import BoundaryMeanIoU
+from terratorch.tasks.tiled_inference import tiled_inference
 
 BATCH_IDX_FOR_VALIDATION_PLOTTING = 10
 
@@ -26,6 +26,7 @@ logger = logging.getLogger("terratorch")
 def to_segmentation_prediction(y: ModelOutput) -> Tensor:
     y_hat = y.output
     return y_hat.argmax(dim=1)
+
 
 def init_loss(loss: str, ignore_index: int = None, class_weights: list = None) -> nn.Module:
     if loss == "ce":
@@ -139,7 +140,7 @@ class SemanticSegmentationTask(TerraTorchTask):
                 This argument has been deprecated and will be replaced with `output_on_inference`.
             tiled_inference_on_testing (bool): A boolean to define if tiled inference will be used during the test step.
             tiled_inference_on_validation (bool): A boolean to define if tiled inference will be used during the val step.
-            path_to_record_metrics (str): A path to save the file containing the metrics log. 
+            path_to_record_metrics (str): A path to save the file containing the metrics log.
         """
 
         self.tiled_inference_parameters = tiled_inference_parameters
@@ -243,18 +244,17 @@ class SemanticSegmentationTask(TerraTorchTask):
             self.criterion = loss
         elif isinstance(loss, list):
             # List of losses with equal weights
-            losses = {loss: init_loss(loss, ignore_index=ignore_index, class_weights=class_weights)
-                      for loss in loss}
+            losses = {loss: init_loss(loss, ignore_index=ignore_index, class_weights=class_weights) for loss in loss}
             self.criterion = CombinedLoss(losses=losses)
         elif isinstance(loss, dict):
             # Equal weighting of losses
             loss, weight = list(loss.keys()), list(loss.values())
-            losses = {loss: init_loss(loss, ignore_index=ignore_index, class_weights=class_weights)
-                      for loss in loss}
+            losses = {loss: init_loss(loss, ignore_index=ignore_index, class_weights=class_weights) for loss in loss}
             self.criterion = CombinedLoss(losses=losses, weight=weight)
         else:
-            raise ValueError(f"The loss type {loss} isn't supported. Provide loss as string, list, or "
-                             f"dict[name, weights].")
+            raise ValueError(
+                f"The loss type {loss} isn't supported. Provide loss as string, list, or dict[name, weights]."
+            )
 
     def configure_metrics(self) -> None:
         """Initialize the performance metrics."""
@@ -319,7 +319,7 @@ class SemanticSegmentationTask(TerraTorchTask):
             )
         else:
             self.test_metrics = nn.ModuleList([metrics.clone(prefix="test/")])
-    
+
     def training_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Tensor:
         """Compute the train loss and additional metrics.
 
@@ -353,7 +353,7 @@ class SemanticSegmentationTask(TerraTorchTask):
         x = batch["image"]
         y = self.squeeze_ground_truth(batch["mask"])
         other_keys = batch.keys() - {"image", "mask", "filename"}
-        
+
         rest = {k: batch[k] for k in other_keys}
 
         model_output = self.handle_full_or_tiled_inference(x, self.tiled_inference_on_testing, **rest)

@@ -1,14 +1,15 @@
-import os
 import json
+import logging
+import os
+import random
+
+import matplotlib.pyplot as plt
 import torch
+from matplotlib import patches
+from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import functional as F
-from PIL import Image
-import random
 from tqdm import tqdm
-import logging
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 
 
 def atomic_write_image(tensor, path):
@@ -55,7 +56,6 @@ class TiledDataset(Dataset):
         step_h = self.tile_h - self.overlap
         step_w = self.tile_w - self.overlap
 
-
         for idx in tqdm(range(len(self.base_dataset)), desc="Processing items"):
             sample = self.base_dataset[idx]
             img, boxes, labels = sample["image"], sample["boxes"], sample["labels"]
@@ -80,10 +80,7 @@ class TiledDataset(Dataset):
                         continue
 
                     # crop tile
-                    tile = F.crop(
-                        img, top=y0, left=x0,
-                        height=self.tile_h, width=self.tile_w
-                    ).clone()
+                    tile = F.crop(img, top=y0, left=x0, height=self.tile_h, width=self.tile_w).clone()
 
                     # shift boxes
                     x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
@@ -99,16 +96,17 @@ class TiledDataset(Dataset):
                     inter_w = (inter_x2 - inter_x1).clamp(min=0)
                     inter_h = (inter_y2 - inter_y1).clamp(min=0)
                     inter_area = inter_w * inter_h
-                    area = (box_shifted[:, 2] - box_shifted[:, 0]).clamp(min=0) * \
-                           (box_shifted[:, 3] - box_shifted[:, 1]).clamp(min=0)
+                    area = (box_shifted[:, 2] - box_shifted[:, 0]).clamp(min=0) * (
+                        box_shifted[:, 3] - box_shifted[:, 1]
+                    ).clamp(min=0)
                     overlap_ratio = inter_area / (area + 1e-6)
                     keep = overlap_ratio > 0.2
 
                     box_shifted = box_shifted[keep]
                     label_shifted = labels[keep]
 
-                    if len(box_shifted) == 0 and self.skip_empty_boxes: # skip empty boxes
-                        continue   
+                    if len(box_shifted) == 0 and self.skip_empty_boxes:  # skip empty boxes
+                        continue
 
                     if len(box_shifted) > 0:
                         box_shifted[:, 0::2] = box_shifted[:, 0::2].clamp(0, self.tile_w)
@@ -137,7 +135,7 @@ class TiledDataset(Dataset):
         img = Image.open(f_img).convert("RGB")
         img = F.to_tensor(img)
 
-        with open(f_json, "r") as f:
+        with open(f_json) as f:
             meta = json.load(f)
 
         boxes = torch.tensor(meta["boxes"], dtype=torch.float32)
@@ -149,7 +147,6 @@ class TiledDataset(Dataset):
             "labels": labels,
             "image_id": meta["image_id"],
         }
-
 
     def plot(self, sample: dict[str, torch.Tensor], suptitle: str | None = None) -> plt.Figure:
         """Plot a sample with bounding boxes."""
@@ -168,17 +165,15 @@ class TiledDataset(Dataset):
         for box, label in zip(boxes, labels):
             x1, y1, x2, y2 = box.tolist()
             w, h = x2 - x1, y2 - y1
-            rect = patches.Rectangle(
-                (x1, y1), w, h,
-                linewidth=2, edgecolor="r", facecolor="none"
-            )
+            rect = patches.Rectangle((x1, y1), w, h, linewidth=2, edgecolor="r", facecolor="none")
             ax.add_patch(rect)
             ax.text(
-                x1, y1,
+                x1,
+                y1,
                 str(label.item()),
                 fontsize=8,
                 color="white",
-                bbox=dict(facecolor="red", alpha=0.5, edgecolor="none", pad=1)
+                bbox=dict(facecolor="red", alpha=0.5, edgecolor="none", pad=1),
             )
 
         if suptitle is not None:

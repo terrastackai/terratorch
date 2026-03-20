@@ -1,7 +1,8 @@
 import torch
-import torch.nn as nn
+from torch import nn
 
 from terratorch.registry import TERRATORCH_BACKBONE_REGISTRY
+
 
 @TERRATORCH_BACKBONE_REGISTRY.register
 class IdentityBackbone(nn.Module):

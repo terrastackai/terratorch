@@ -19,7 +19,7 @@ TESTED_PEFT_METHODS = ["LORA"]
 def _get_submodules(model: nn.Module, key: str) -> tuple[nn.Module, nn.Module, str]:
     # adapted from PEFT
     parent = model.get_submodule(".".join(key.split(".")[:-1]))
-    target_name = key.split(".")[-1]
+    target_name = key.rsplit(".", maxsplit=1)[-1]
     target = model.get_submodule(key)
     return parent, target, target_name
 
@@ -46,10 +46,7 @@ def _validate_terratorch_peft_config(peft_config: dict[str, Any]) -> TerratorchP
 def get_peft_backbone(peft_config: dict[str, Any], backbone: nn.Module) -> nn.Module:
     terratorch_peft_config = _validate_terratorch_peft_config(peft_config)
     if not _has_peft:
-        msg = (
-            "You need to install terratorch with peft dependency to use peft_config. "
-            "Use pip install terratorch[peft]"
-        )
+        msg = "You need to install terratorch with peft dependency to use peft_config. Use pip install terratorch[peft]"
         raise ImportError(msg)
     peft_config_cls = PEFT_TYPE_TO_CONFIG_MAPPING[terratorch_peft_config.method]
     peft_config_peft = peft_config_cls(**terratorch_peft_config.peft_config_kwargs)

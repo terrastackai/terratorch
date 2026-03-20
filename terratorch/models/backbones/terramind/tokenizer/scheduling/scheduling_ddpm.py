@@ -22,15 +22,16 @@
 # and https://github.com/ermongroup/ddim
 
 
+from dataclasses import dataclass
+
 import numpy as np
 import torch
-from dataclasses import dataclass
 from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.schedulers.scheduling_utils import KarrasDiffusionSchedulers, SchedulerMixin
 from diffusers.utils import BaseOutput
 from diffusers.utils.torch_utils import randn_tensor
-from diffusers.schedulers.scheduling_utils import KarrasDiffusionSchedulers, SchedulerMixin
 
-from .scheduling_utils import enforce_zero_terminal_snr, betas_for_alpha_bar, scaled_cosine_alphas
+from .scheduling_utils import betas_for_alpha_bar, enforce_zero_terminal_snr, scaled_cosine_alphas
 
 
 @dataclass
@@ -49,6 +50,7 @@ class DDPMSchedulerOutput(BaseOutput):
 
     prev_sample: torch.FloatTensor
     pred_original_sample: torch.FloatTensor | None = None
+
 
 class DDPMScheduler(SchedulerMixin, ConfigMixin):
     """
@@ -113,9 +115,9 @@ class DDPMScheduler(SchedulerMixin, ConfigMixin):
         sample_max_value: float = 1.0,
         zero_terminal_snr: bool = True,
     ):
-        if 'shifted_cosine:' in beta_schedule:
+        if "shifted_cosine:" in beta_schedule:
             # Syntax is "shifted_cosine:{noise_shift}"
-            noise_shift = float(beta_schedule.split(':')[1])
+            noise_shift = float(beta_schedule.split(":")[1])
             self.alphas_cumprod = scaled_cosine_alphas(num_train_timesteps, noise_shift)
         else:
             if trained_betas is not None:
@@ -125,7 +127,8 @@ class DDPMScheduler(SchedulerMixin, ConfigMixin):
             elif beta_schedule == "scaled_linear":
                 # this schedule is very specific to the latent diffusion model.
                 self.betas = (
-                    torch.linspace(beta_start**0.5, beta_end**0.5, num_train_timesteps, dtype=torch.get_default_dtype()) ** 2
+                    torch.linspace(beta_start**0.5, beta_end**0.5, num_train_timesteps, dtype=torch.get_default_dtype())
+                    ** 2
                 )
             elif beta_schedule == "squaredcos_cap_v2":
                 # Glide cosine schedule
@@ -136,7 +139,7 @@ class DDPMScheduler(SchedulerMixin, ConfigMixin):
                 self.betas = torch.sigmoid(betas) * (beta_end - beta_start) + beta_start
             else:
                 raise NotImplementedError(f"{beta_schedule} does is not implemented for {self.__class__}")
-            
+
             if zero_terminal_snr:
                 self.betas = enforce_zero_terminal_snr(self.betas)
 
@@ -201,8 +204,7 @@ class DDPMScheduler(SchedulerMixin, ConfigMixin):
 
             if timesteps[0] >= self.config.num_train_timesteps:
                 raise ValueError(
-                    f"`timesteps` must start before `self.config.train_timesteps`:"
-                    f" {self.config.num_train_timesteps}."
+                    f"`timesteps` must start before `self.config.train_timesteps`: {self.config.num_train_timesteps}."
                 )
 
             timesteps = np.array(timesteps, dtype=np.int64)
@@ -392,7 +394,7 @@ class DDPMScheduler(SchedulerMixin, ConfigMixin):
             return (pred_prev_sample,)
 
         return DDPMSchedulerOutput(prev_sample=pred_prev_sample, pred_original_sample=pred_original_sample)
-    
+
     def get_alpha_sigma_sqrts(self, timesteps, device, dtype, shape) -> torch.FloatTensor:
         # Make sure alphas_cumprod and timestep have same device and dtype as original_samples
         alphas_cumprod = self.alphas_cumprod.to(device=device, dtype=dtype)
@@ -407,27 +409,36 @@ class DDPMScheduler(SchedulerMixin, ConfigMixin):
         sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.flatten()
         while len(sqrt_one_minus_alpha_prod.shape) < len(shape):
             sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
-        
+
         return sqrt_alpha_prod, sqrt_one_minus_alpha_prod
 
     def add_noise(
-        self, original_samples: torch.FloatTensor, noise: torch.FloatTensor, timesteps: torch.IntTensor,
+        self,
+        original_samples: torch.FloatTensor,
+        noise: torch.FloatTensor,
+        timesteps: torch.IntTensor,
     ) -> torch.FloatTensor:
-        sqrt_alpha_prod, sqrt_one_minus_alpha_prod = self.get_alpha_sigma_sqrts(timesteps, original_samples.device, original_samples.dtype, original_samples.shape)
+        sqrt_alpha_prod, sqrt_one_minus_alpha_prod = self.get_alpha_sigma_sqrts(
+            timesteps, original_samples.device, original_samples.dtype, original_samples.shape
+        )
         noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
         return noisy_samples
 
     def get_velocity(
         self, sample: torch.FloatTensor, noise: torch.FloatTensor, timesteps: torch.IntTensor
     ) -> torch.FloatTensor:
-        sqrt_alpha_prod, sqrt_one_minus_alpha_prod = self.get_alpha_sigma_sqrts(timesteps, sample.device, sample.dtype, sample.shape)
+        sqrt_alpha_prod, sqrt_one_minus_alpha_prod = self.get_alpha_sigma_sqrts(
+            timesteps, sample.device, sample.dtype, sample.shape
+        )
         velocity = sqrt_alpha_prod * noise - sqrt_one_minus_alpha_prod * sample
         return velocity
-    
+
     def get_noise(
         self, sample: torch.FloatTensor, velocity: torch.FloatTensor, timesteps: torch.IntTensor
     ) -> torch.FloatTensor:
-        sqrt_alpha_prod, sqrt_one_minus_alpha_prod = self.get_alpha_sigma_sqrts(timesteps, sample.device, sample.dtype, sample.shape)
+        sqrt_alpha_prod, sqrt_one_minus_alpha_prod = self.get_alpha_sigma_sqrts(
+            timesteps, sample.device, sample.dtype, sample.shape
+        )
         noise = sqrt_alpha_prod * velocity + sqrt_one_minus_alpha_prod * sample
         return noise
 

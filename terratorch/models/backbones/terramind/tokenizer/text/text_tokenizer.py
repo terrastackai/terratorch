@@ -1,18 +1,18 @@
-
-import warnings
 import re
+import warnings
+
 import torch
-from torch import nn
-from tokenizers import Tokenizer, AddedToken
-from tokenizers.models import WordPiece
-from tokenizers.pre_tokenizers import BertPreTokenizer
-from tokenizers.normalizers import BertNormalizer
+from tokenizers import AddedToken, Tokenizer
 from tokenizers.decoders import WordPiece as WordPieceDecoder
+from tokenizers.models import WordPiece
+from tokenizers.normalizers import BertNormalizer
+from tokenizers.pre_tokenizers import BertPreTokenizer
+from torch import nn
 
 
 def build_blank_wordpiece():
     # Minimal tokens needed for testing
-    vocab = {"[PAD]": 0, "[UNK]": 1, "[SOS]": 2,"[EOS]": 3, "[S_0]": 4, "[S_1]": 5, "[S_2]": 6}
+    vocab = {"[PAD]": 0, "[UNK]": 1, "[SOS]": 2, "[EOS]": 3, "[S_0]": 4, "[S_1]": 5, "[S_2]": 6}
     added_tokens = [AddedToken(w, normalized=False, special=True) for w in vocab.keys()]
     tok = Tokenizer(WordPiece(vocab, unk_token="[UNK]"))
     tok.normalizer = BertNormalizer()
@@ -24,8 +24,8 @@ def build_blank_wordpiece():
 
 def capitalize_sentences(text):
     # Split text into sentences using a regex that looks for sentence end punctuation
-    sentences = re.split('([.!?] *)', text)
-    capitalized = ''.join([s.capitalize() for s in sentences])
+    sentences = re.split("([.!?] *)", text)
+    capitalized = "".join([s.capitalize() for s in sentences])
     return capitalized
 
 
@@ -54,7 +54,6 @@ class CaptionTokenizer(nn.Module):
 
         # Add EOS token
         tok_ids = [t + [eos_id] for t in tok_ids]
-
 
         tok_ids = torch.tensor(tok_ids, device=device)
 
@@ -110,8 +109,9 @@ class CoordsTokenizer(nn.Module):
             tok_ids(tuple[torch.Tensor]): Token ids with shape [B, 2]
         """
         if coords.shape[1] != 2:
-            raise ValueError(f"Expect coords data in shape [batch, 2] with [lon, lat] values, "
-                             f"got coords with shape {coords.shape}.")
+            raise ValueError(
+                f"Expect coords data in shape [batch, 2] with [lon, lat] values, got coords with shape {coords.shape}."
+            )
 
         # Align coords with 0.25 degree grid
         coords = (coords * 4).round() / 4
@@ -153,8 +153,9 @@ class CoordsTokenizer(nn.Module):
                 lat, lon = text.split(" ")
                 coords.append([float(lon.strip("lon=")), float(lat.strip("lat="))])
             except Exception as e:
-                warnings.warn(f"Coordinate generation did not work correctly, generated text: {text} (Error: {e}). "
-                              f"Returning NaN.")
+                warnings.warn(
+                    f"Coordinate generation did not work correctly, generated text: {text} (Error: {e}). Returning NaN."
+                )
                 coords.append([torch.nan, torch.nan])
 
         return coords

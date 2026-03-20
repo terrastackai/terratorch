@@ -1,30 +1,29 @@
+import os
 import random
+
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
+from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
-from PIL import Image
-import numpy as np
-import os
-import matplotlib.pyplot as plt
-import terratorch.visualization as ttv
 
+import terratorch.visualization as ttv
 
 
 class CopyPasteObjectDetectionDataset(Dataset):
     def __init__(
         self,
-        base_dataset,              # yields (image, boxes)
-        object_folder,             # folder with PNGs (RGBA)
+        base_dataset,  # yields (image, boxes)
+        object_folder,  # folder with PNGs (RGBA)
         paste_prob=0.7,
         scale_range=(0.5, 1.5),
         max_objects=3,
-        image_size=None            # (H, W) or None
+        image_size=None,  # (H, W) or None
     ):
         self.base_dataset = base_dataset
         self.object_paths = [
-            os.path.join(object_folder, f)
-            for f in os.listdir(object_folder)
-            if f.lower().endswith(".png")
+            os.path.join(object_folder, f) for f in os.listdir(object_folder) if f.lower().endswith(".png")
         ]
         assert len(self.object_paths) > 0
 
@@ -60,40 +59,33 @@ class CopyPasteObjectDetectionDataset(Dataset):
         rgb = torch.from_numpy(obj_np[..., :3]).permute(2, 0, 1) / 255.0
         alpha = torch.from_numpy(obj_np[..., 3] / 255.0)
 
-        image[:, oy:oy+oh, ox:ox+ow] = (
-            image[:, oy:oy+oh, ox:ox+ow] * (1 - alpha)
-            + rgb * alpha
-        )
+        image[:, oy : oy + oh, ox : ox + ow] = image[:, oy : oy + oh, ox : ox + ow] * (1 - alpha) + rgb * alpha
 
-        mask[oy:oy+oh, ox:ox+ow] |= (alpha > 0.5)
+        mask[oy : oy + oh, ox : ox + ow] |= alpha > 0.5
 
         bbox = torch.tensor([ox, oy, ox + ow, oy + oh], dtype=torch.float32)
         return image, mask, bbox
 
     def __getitem__(self, idx):
         item = self.base_dataset[idx]
-        
+
         # Handle both dict and tuple returns
         if isinstance(item, dict):
-            image = item['image']
-            boxes = item['boxes']
-            labels = item.get('labels', None)
-        else:  # tuple format (image, boxes) or (image, boxes, labels)
-            if len(item) == 2:
-                image, boxes = item
-                labels = None
-            else:
-                image, boxes, labels = item[:3]
+            image = item["image"]
+            boxes = item["boxes"]
+            labels = item.get("labels", None)
+        elif len(item) == 2:
+            image, boxes = item
+            labels = None
+        else:
+            image, boxes, labels = item[:3]
 
         if isinstance(image, Image.Image):
             image = self.to_tensor(image)
 
         if self.image_size is not None:
             image = torch.nn.functional.interpolate(
-                image.unsqueeze(0),
-                size=self.image_size,
-                mode="bilinear",
-                align_corners=False
+                image.unsqueeze(0), size=self.image_size, mode="bilinear", align_corners=False
             ).squeeze(0)
 
         H, W = image.shape[-2:]
@@ -116,13 +108,7 @@ class CopyPasteObjectDetectionDataset(Dataset):
                 if labels is not None:
                     labels = torch.cat([labels, torch.tensor([1], dtype=torch.long)], dim=0)
 
-        return {
-            "image": image.float(),
-            "boxes": boxes,
-            "mask": mask,
-            "labels": labels
-        }
-
+        return {"image": image.float(), "boxes": boxes, "mask": mask, "labels": labels}
 
     def plot(
         self,
@@ -134,7 +120,7 @@ class CopyPasteObjectDetectionDataset(Dataset):
         fig = ttv.plot_boxes_labels(
             image=sample["image"],
             boxes=sample["boxes"],
-            show=False,          # REQUIRED for TensorBoard
+            show=False,  # REQUIRED for TensorBoard
         )
 
         if suptitle:

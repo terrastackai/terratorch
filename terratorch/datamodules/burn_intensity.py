@@ -2,10 +2,10 @@ from collections.abc import Sequence
 from typing import Any
 
 import albumentations as A
+from torchgeo.datamodules import NonGeoDataModule
 
 from terratorch.datamodules.utils import Normalize, wrap_in_compose_is_list
 from terratorch.datasets import BurnIntensityNonGeo
-from torchgeo.datamodules import NonGeoDataModule
 
 MEANS = {
     "BLUE": [331.6921, 896.8024, 348.8031],
@@ -24,6 +24,7 @@ STDS = {
     "SWIR_1": [677.2739, 1153.7432, 795.4156],
     "SWIR_2": [612.9131, 1495.8365, 661.6196],
 }
+
 
 class BurnIntensityNonGeoDataModule(NonGeoDataModule):
     """NonGeo LightningDataModule implementation for BurnIntensity datamodule."""

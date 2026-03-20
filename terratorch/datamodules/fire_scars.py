@@ -6,11 +6,11 @@ from typing import Any
 
 import albumentations as A
 import kornia.augmentation as K  # noqa: N812
+from kornia.augmentation import AugmentationSequential
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torchgeo.datamodules import GeoDataModule, NonGeoDataModule
 from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
-from kornia.augmentation import AugmentationSequential
 
 from terratorch.datamodules.utils import wrap_in_compose_is_list
 from terratorch.datasets import FireScarsHLS, FireScarsNonGeo, FireScarsSegmentationMask
@@ -171,21 +171,13 @@ class FireScarsDataModule(GeoDataModule):
         self.data_root = data_root
 
     def setup(self, stage: str) -> None:
-        self.images = FireScarsHLS(
-            os.path.join(self.data_root, "training/")
-        )
-        self.labels = FireScarsSegmentationMask(
-            os.path.join(self.data_root, "training/")
-        )
+        self.images = FireScarsHLS(os.path.join(self.data_root, "training/"))
+        self.labels = FireScarsSegmentationMask(os.path.join(self.data_root, "training/"))
         self.dataset = self.images & self.labels
         self.train_aug = AugmentationSequential(K.RandomCrop(224, 224), K.normalize(), data_keys=None)
 
-        self.images_test = FireScarsHLS(
-            os.path.join(self.data_root, "validation/")
-        )
-        self.labels_test = FireScarsSegmentationMask(
-            os.path.join(self.data_root, "validation/")
-        )
+        self.images_test = FireScarsHLS(os.path.join(self.data_root, "validation/"))
+        self.labels_test = FireScarsSegmentationMask(os.path.join(self.data_root, "validation/"))
         self.val_dataset = self.images_test & self.labels_test
 
         if stage in ["fit"]:

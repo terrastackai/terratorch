@@ -9,13 +9,14 @@ import numpy as np
 import torch
 from matplotlib import colormaps
 from matplotlib.colors import Normalize
+from torchgeo.datasets import NonGeoDataset
 
 from terratorch.datasets.utils import default_transform, validate_bands
-from torchgeo.datasets import NonGeoDataset
 
 
 class Landslide4SenseNonGeo(NonGeoDataset):
     """NonGeo dataset implementation for [Landslide4Sense](https://huggingface.co/datasets/ibm-nasa-geospatial/Landslide4sense)."""
+
     all_band_names = (
         "COASTAL AEROSOL",
         "BLUE",
@@ -37,7 +38,6 @@ class Landslide4SenseNonGeo(NonGeoDataset):
     BAND_SETS = {"all": all_band_names, "rgb": rgb_bands}
 
     splits = {"train": "train", "val": "validation", "test": "test"}
-
 
     def __init__(
         self,
@@ -143,9 +143,7 @@ class Landslide4SenseNonGeo(NonGeoDataset):
 
         if sample.get("class_names"):
             class_names = sample["class_names"]
-            legend_handles = [
-                mpatches.Patch(color=cmap(i), label=class_names[i]) for i in range(num_classes)
-            ]
+            legend_handles = [mpatches.Patch(color=cmap(i), label=class_names[i]) for i in range(num_classes)]
             ax[0].legend(handles=legend_handles, bbox_to_anchor=(1.05, 1), loc="upper left")
 
         if suptitle:

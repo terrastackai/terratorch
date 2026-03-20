@@ -12,16 +12,16 @@ from torch import nn
 
 from terratorch.models.model import Model, ModelFactory, ModelOutput
 from terratorch.models.utils import extract_prefix_keys
-from terratorch.registry import MODEL_FACTORY_REGISTRY
-from terratorch.registry import BACKBONE_REGISTRY
+from terratorch.registry import BACKBONE_REGISTRY, MODEL_FACTORY_REGISTRY
+
 
 def freeze_module(module: nn.Module):
     for param in module.parameters():
         param.requires_grad_(False)
 
+
 @MODEL_FACTORY_REGISTRY.register
 class GenericModelFactory(ModelFactory):
-
     def build_model(
         self,
         backbone: str | None = None,
@@ -50,12 +50,13 @@ class GenericModelFactory(ModelFactory):
 
         return GenericModelWrapper(model)
 
+
 class GenericModelWrapper(Model, nn.Module):
     """
     A wrapper to adapt a generic model to be used with TerraTorch
 
-    Args: 
-        model (torch.nn.Module): The model we want to wrap. 
+    Args:
+        model (torch.nn.Module): The model we want to wrap.
 
     Returns:
         The wrapped model.
@@ -74,16 +75,17 @@ class GenericModelWrapper(Model, nn.Module):
     def forward(self, *args, **kwargs):
         """
         The forward method is prepared to receive any argument or keyword the wrapped model
-        need to run. 
+        need to run.
         """
         # It supposes the input has dimension (B, C, H, W)
-        input_data = [args[0]] # It adapts the input to became a list of time 'snapshots'
+        input_data = [args[0]]  # It adapts the input to became a list of time 'snapshots'
 
         model_output = self.model(*args, **kwargs)
 
         model_output = ModelOutput(model_output)
 
         return model_output
+
 
 def _extract_prefix_keys(d: dict, prefix: str) -> dict:
     extracted_dict = {}
@@ -97,4 +99,3 @@ def _extract_prefix_keys(d: dict, prefix: str) -> dict:
         del d[k]
 
     return extracted_dict
-

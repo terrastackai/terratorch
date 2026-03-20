@@ -61,11 +61,21 @@ prithvi_cfgs = {
     ),
     "prithvi_eo_v1_100": _cfg(num_frames=3, mean=PRITHVI_V1_MEAN, std=PRITHVI_V1_STD),
     "prithvi_eo_v2_tiny_tl": _cfg(
-        num_frames=1, embed_dim=192, depth=12, num_heads=3, decoder_embed_dim=512, decoder_depth=8,
-        decoder_num_heads=16, coords_encoding=["time", "location"], coords_scale_learn=True,
+        num_frames=1,
+        embed_dim=192,
+        depth=12,
+        num_heads=3,
+        decoder_embed_dim=512,
+        decoder_depth=8,
+        decoder_num_heads=16,
+        coords_encoding=["time", "location"],
+        coords_scale_learn=True,
     ),
     "prithvi_eo_v2_100": _cfg(),
-    "prithvi_eo_v2_100_tl": _cfg(coords_encoding=["time", "location"], coords_scale_learn=True,),
+    "prithvi_eo_v2_100_tl": _cfg(
+        coords_encoding=["time", "location"],
+        coords_scale_learn=True,
+    ),
     "prithvi_eo_v2_300": _cfg(embed_dim=1024, depth=24, num_heads=16),
     "prithvi_eo_v2_300_tl": _cfg(
         embed_dim=1024, depth=24, num_heads=16, coords_encoding=["time", "location"], coords_scale_learn=True
@@ -379,8 +389,7 @@ def prithvi_eo_tiny(
     **kwargs,
 ) -> PrithviViT | PrithviViTAdapter:
     return _create_prithvi(
-        "prithvi_eo_tiny", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}),
-        **kwargs
+        "prithvi_eo_tiny", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}), **kwargs
     )
 
 
@@ -392,8 +401,7 @@ def prithvi_eo_v1_100(
     **kwargs,
 ) -> PrithviViT | PrithviViTAdapter:
     return _create_prithvi(
-        "prithvi_eo_v1_100", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}),
-        **kwargs
+        "prithvi_eo_v1_100", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}), **kwargs
     )
 
 
@@ -405,8 +413,11 @@ def prithvi_eo_v2_tiny_tl(
     **kwargs,
 ) -> PrithviViT | PrithviViTAdapter:
     return _create_prithvi(
-        "prithvi_eo_v2_tiny_tl", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}),
-        **kwargs
+        "prithvi_eo_v2_tiny_tl",
+        pretrained=pretrained,
+        vit_adapter=vit_adapter,
+        **dict({"model_bands": bands}),
+        **kwargs,
     )
 
 
@@ -418,8 +429,7 @@ def prithvi_eo_v2_100_tl(
     **kwargs,
 ) -> PrithviViT | PrithviViTAdapter:
     return _create_prithvi(
-        "prithvi_eo_v2_100_tl", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}),
-        **kwargs
+        "prithvi_eo_v2_100_tl", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}), **kwargs
     )
 
 
@@ -431,8 +441,7 @@ def prithvi_eo_v2_300(
     **kwargs,
 ) -> PrithviViT | PrithviViTAdapter:
     return _create_prithvi(
-        "prithvi_eo_v2_300", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}),
-        **kwargs
+        "prithvi_eo_v2_300", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}), **kwargs
     )
 
 
@@ -444,8 +453,7 @@ def prithvi_eo_v2_600(
     **kwargs,
 ) -> PrithviViT | PrithviViTAdapter:
     return _create_prithvi(
-        "prithvi_eo_v2_600", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}),
-        **kwargs
+        "prithvi_eo_v2_600", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}), **kwargs
     )
 
 
@@ -457,8 +465,7 @@ def prithvi_eo_v2_300_tl(
     **kwargs,
 ) -> PrithviViT | PrithviViTAdapter:
     return _create_prithvi(
-        "prithvi_eo_v2_300_tl", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}),
-        **kwargs
+        "prithvi_eo_v2_300_tl", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}), **kwargs
     )
 
 
@@ -470,8 +477,7 @@ def prithvi_eo_v2_600_tl(
     **kwargs,
 ) -> PrithviViT | PrithviViTAdapter:
     return _create_prithvi(
-        "prithvi_eo_v2_600_tl", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}),
-        **kwargs
+        "prithvi_eo_v2_600_tl", pretrained=pretrained, vit_adapter=vit_adapter, **dict({"model_bands": bands}), **kwargs
     )
 
 
@@ -503,8 +509,7 @@ def prithvi_eo_v2_tiny_tl_mae(
     model_bands = kwargs.get("model_bands", bands)
 
     return _create_prithvi(
-        "prithvi_eo_v2_tiny_tl", pretrained=pretrained, model_bands=model_bands, encoder_only=encoder_only,
-        **kwargs
+        "prithvi_eo_v2_tiny_tl", pretrained=pretrained, model_bands=model_bands, encoder_only=encoder_only, **kwargs
     )
 
 
@@ -520,8 +525,7 @@ def prithvi_eo_v2_100_tl_mae(
     model_bands = kwargs.get("model_bands", bands)
 
     return _create_prithvi(
-        "prithvi_eo_v2_100_tl", pretrained=pretrained, model_bands=model_bands, encoder_only=encoder_only,
-        **kwargs
+        "prithvi_eo_v2_100_tl", pretrained=pretrained, model_bands=model_bands, encoder_only=encoder_only, **kwargs
     )
 
 
@@ -553,8 +557,7 @@ def prithvi_eo_v2_300_tl_mae(
     model_bands = kwargs.get("model_bands", bands)
 
     return _create_prithvi(
-        "prithvi_eo_v2_300_tl", pretrained=pretrained, model_bands=model_bands, encoder_only=encoder_only,
-        **kwargs
+        "prithvi_eo_v2_300_tl", pretrained=pretrained, model_bands=model_bands, encoder_only=encoder_only, **kwargs
     )
 
 
@@ -586,6 +589,5 @@ def prithvi_eo_v2_600_tl_mae(
     model_bands = kwargs.get("model_bands", bands)
 
     return _create_prithvi(
-        "prithvi_eo_v2_600_tl", pretrained=pretrained, model_bands=model_bands, encoder_only=encoder_only,
-        **kwargs
+        "prithvi_eo_v2_600_tl", pretrained=pretrained, model_bands=model_bands, encoder_only=encoder_only, **kwargs
     )

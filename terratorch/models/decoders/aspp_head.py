@@ -1,9 +1,11 @@
-import torch 
-from torch import nn
 import numpy as np
+import torch
+from torch import nn
 
 from terratorch.registry import TERRATORCH_DECODER_REGISTRY
+
 from .utils import ConvModule, resize
+
 
 @TERRATORCH_DECODER_REGISTRY.register
 class ASPPModule(nn.Module):
@@ -18,10 +20,9 @@ class ASPPModule(nn.Module):
         act_cfg (dict): Config of activation layers.
     """
 
-    def __init__(self, dilations, in_channels, channels, conv_cfg, norm_cfg,
-                 act_cfg):
+    def __init__(self, dilations, in_channels, channels, conv_cfg, norm_cfg, act_cfg):
 
-        super(ASPPModule, self).__init__()
+        super().__init__()
 
         self.dilations = dilations
         self.in_channels = in_channels
@@ -33,19 +34,19 @@ class ASPPModule(nn.Module):
         modules_list = list()
 
         for dilation in dilations:
-
             layer_module = ConvModule(
-                    self.in_channels,
-                    self.channels,
-                    1 if dilation == 1 else 3,
-                    dilation=dilation,
-                    padding=0 if dilation == 1 else dilation,)
+                self.in_channels,
+                self.channels,
+                1 if dilation == 1 else 3,
+                dilation=dilation,
+                padding=0 if dilation == 1 else dilation,
+            )
 
-                    # TODO Extend it to support more possible configurations
-                    # for convolution, normalization and activation.
-                    #conv_cfg=self.conv_cfg,
-                    #norm_cfg=self.norm_cfg,
-                    #act_cfg=self.act_cfg)
+            # TODO Extend it to support more possible configurations
+            # for convolution, normalization and activation.
+            # conv_cfg=self.conv_cfg,
+            # norm_cfg=self.norm_cfg,
+            # act_cfg=self.act_cfg)
 
             modules_list.append(layer_module)
 
@@ -59,6 +60,7 @@ class ASPPModule(nn.Module):
 
         return outs
 
+
 @TERRATORCH_DECODER_REGISTRY.register
 class ASPPHead(nn.Module):
     """Rethinking Atrous Convolution for Semantic Image Segmentation.
@@ -71,17 +73,20 @@ class ASPPHead(nn.Module):
             Default: (1, 6, 12, 18).
     """
 
-    def __init__(self, dilations:list | tuple =(1, 6, 12, 18), 
-                 in_channels:int=None, 
-                 channels:int=None,
-                 out_dim:int=3,
-                 align_corners=False,
-                 head_dropout_ratio:float=0.3,
-                 input_transform: str = None,
-                 in_index: int = -1,
-                 **kwargs):
+    def __init__(
+        self,
+        dilations: list | tuple = (1, 6, 12, 18),
+        in_channels: int = None,
+        channels: int = None,
+        out_dim: int = 3,
+        align_corners=False,
+        head_dropout_ratio: float = 0.3,
+        input_transform: str = None,
+        in_index: int = -1,
+        **kwargs,
+    ):
 
-        super(ASPPHead, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.dilations = dilations
         self.in_channels = in_channels
@@ -90,15 +95,15 @@ class ASPPHead(nn.Module):
 
         self.align_corners = align_corners
         self.input_transform = input_transform
-        self.in_index = in_index 
+        self.in_index = in_index
 
-        if 'conv_cfg' not in kwargs:
+        if "conv_cfg" not in kwargs:
             self.conv_cfg = self._default_conv_cfg
 
-        if 'norm_cfg' not in kwargs:
+        if "norm_cfg" not in kwargs:
             self.norm_cfg = self._default_norm_cfg
 
-        if 'act_cfg' not in kwargs:
+        if "act_cfg" not in kwargs:
             self.act_cfg = self._default_act_cfg
 
         self.image_pool = nn.Sequential(
@@ -107,13 +112,13 @@ class ASPPHead(nn.Module):
                 self.in_channels,
                 self.channels,
                 1,
-
                 # TODO Extend it to support more possible configurations
                 # for convolution, normalization and activation.
-                #self.conv_cfg,
-                #norm_cfg=self.norm_cfg,
-                #act_cfg=self.act_cfg))
-                ))
+                # self.conv_cfg,
+                # norm_cfg=self.norm_cfg,
+                # act_cfg=self.act_cfg))
+            ),
+        )
 
         self.aspp_modules = ASPPModule(
             dilations,
@@ -121,17 +126,19 @@ class ASPPHead(nn.Module):
             self.channels,
             conv_cfg=self.conv_cfg,
             norm_cfg=self.norm_cfg,
-            act_cfg=self.act_cfg)
+            act_cfg=self.act_cfg,
+        )
 
         self.bottleneck = ConvModule(
             (len(dilations) + 1) * self.channels,
             self.channels,
-            padding=1,)
-            # TODO Extend it to support more possible configurations
-            # for convolution, normalization and activation.
-            #conv_cfg=self.conv_cfg,
-            #norm_cfg=self.norm_cfg,
-            #act_cfg=self.act_cfg)
+            padding=1,
+        )
+        # TODO Extend it to support more possible configurations
+        # for convolution, normalization and activation.
+        # conv_cfg=self.conv_cfg,
+        # norm_cfg=self.norm_cfg,
+        # act_cfg=self.act_cfg)
 
         if head_dropout_ratio > 0:
             self.dropout = nn.Dropout2d(head_dropout_ratio)
@@ -158,17 +165,14 @@ class ASPPHead(nn.Module):
             Tensor: The transformed inputs
         """
 
-        if self.input_transform == 'resize_concat':
+        if self.input_transform == "resize_concat":
             inputs = [inputs[i] for i in self.in_index]
             upsampled_inputs = [
-                resize(
-                    input=x,
-                    size=inputs[0].shape[2:],
-                    mode='bilinear',
-                    align_corners=self.align_corners) for x in inputs
+                resize(input=x, size=inputs[0].shape[2:], mode="bilinear", align_corners=self.align_corners)
+                for x in inputs
             ]
             inputs = torch.cat(upsampled_inputs, dim=1)
-        elif self.input_transform == 'multiple_select':
+        elif self.input_transform == "multiple_select":
             inputs = [inputs[i] for i in self.in_index]
         else:
             inputs = inputs[self.in_index]
@@ -188,11 +192,7 @@ class ASPPHead(nn.Module):
         inputs = self._transform_inputs(inputs)
 
         aspp_outs = [
-            resize(
-                self.image_pool(inputs),
-                size=inputs.size()[2:],
-                mode='bilinear',
-                align_corners=self.align_corners)
+            resize(self.image_pool(inputs), size=inputs.size()[2:], mode="bilinear", align_corners=self.align_corners)
         ]
 
         aspp_outs.extend(self.aspp_modules(inputs))
@@ -207,6 +207,7 @@ class ASPPHead(nn.Module):
 
         return output
 
+
 @TERRATORCH_DECODER_REGISTRY.register
 class ASPPSegmentationHead(ASPPHead):
     """Rethinking Atrous Convolution for Semantic Image Segmentation.
@@ -219,26 +220,30 @@ class ASPPSegmentationHead(ASPPHead):
             Default: (1, 6, 12, 18).
     """
 
-    def __init__(self, channel_list,
-                 dilations:list | tuple =(1, 6, 12, 18), 
-                 in_channels:int=None, 
-                 channels:int=None,
-                 num_classes:int=2,
-                 align_corners=False,
-                 head_dropout_ratio:float=0.3,
-                 input_transform: str = None,
-                 in_index: int = -1,
-                 **kwargs):
+    def __init__(
+        self,
+        channel_list,
+        dilations: list | tuple = (1, 6, 12, 18),
+        in_channels: int = None,
+        channels: int = None,
+        num_classes: int = 2,
+        align_corners=False,
+        head_dropout_ratio: float = 0.3,
+        input_transform: str = None,
+        in_index: int = -1,
+        **kwargs,
+    ):
 
-        super(ASPPSegmentationHead, self).__init__(
-                 dilations=dilations, 
-                 in_channels=in_channels, 
-                 channels=channels,
-                 align_corners=align_corners,
-                 head_dropout_ratio=head_dropout_ratio,
-                 input_transform=input_transform,
-                 in_index=in_index,
-                **kwargs)
+        super().__init__(
+            dilations=dilations,
+            in_channels=in_channels,
+            channels=channels,
+            align_corners=align_corners,
+            head_dropout_ratio=head_dropout_ratio,
+            input_transform=input_transform,
+            in_index=in_index,
+            **kwargs,
+        )
 
         self.num_classes = num_classes
         self.conv_seg = nn.Conv2d(self.channels, self.num_classes, kernel_size=1)
@@ -247,7 +252,6 @@ class ASPPSegmentationHead(ASPPHead):
             self.dropout = nn.Dropout2d(head_dropout_ratio)
 
     def segmentation_head(self, features):
-
         """PixelWise classification"""
 
         if self.dropout is not None:
@@ -262,6 +266,7 @@ class ASPPSegmentationHead(ASPPHead):
 
         return output
 
+
 @TERRATORCH_DECODER_REGISTRY.register
 class ASPPRegressionHead(ASPPHead):
     """Rethinking Atrous Convolution for regression.
@@ -274,39 +279,41 @@ class ASPPRegressionHead(ASPPHead):
             Default: (1, 6, 12, 18).
     """
 
-    def __init__(self, channel_list,
-                 dilations:list | tuple =(1, 6, 12, 18), 
-                 in_channels:int=None, 
-                 channels:int=None,
-                 out_channels:int=1,
-                 align_corners=False,
-                 head_dropout_ratio:float=0.3,
-                 input_transform: str = None,
-                 in_index: int = -1,
-                 **kwargs):
+    def __init__(
+        self,
+        channel_list,
+        dilations: list | tuple = (1, 6, 12, 18),
+        in_channels: int = None,
+        channels: int = None,
+        out_channels: int = 1,
+        align_corners=False,
+        head_dropout_ratio: float = 0.3,
+        input_transform: str = None,
+        in_index: int = -1,
+        **kwargs,
+    ):
 
-        super(ASPPRegressionHead, self).__init__(
-                 dilations=dilations, 
-                 in_channels=in_channels, 
-                 channels=channels,
-                 out_dim=out_channels,
-                 align_corners=align_corners,
-                 head_dropout_ratio=head_dropout_ratio,
-                 input_transform=input_transform,
-                 in_index=in_index,
-                **kwargs)
+        super().__init__(
+            dilations=dilations,
+            in_channels=in_channels,
+            channels=channels,
+            out_dim=out_channels,
+            align_corners=align_corners,
+            head_dropout_ratio=head_dropout_ratio,
+            input_transform=input_transform,
+            in_index=in_index,
+            **kwargs,
+        )
 
         self.out_channels = out_channels
         self.conv_reg = nn.Conv2d(self.channels, self.out_channels, kernel_size=1)
 
     def regression_head(self, features):
-
         """PixelWise regression"""
         if self.dropout is not None:
             features = self.dropout(features)
         output = self.conv_reg(features)
         return output
-
 
     def forward(self, inputs):
 
@@ -314,5 +321,3 @@ class ASPPRegressionHead(ASPPHead):
         output = self.regression_head(output)
 
         return output
-
-

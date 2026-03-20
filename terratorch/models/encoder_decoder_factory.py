@@ -1,27 +1,27 @@
 # Copyright contributors to the Terratorch project
 
-import torch
-from typing import List
-import warnings
 import logging
+import warnings
+from typing import List
+
+import torch
 from torch import nn
 
+from terratorch.models.embedding_output_model import EmbeddingOutputModel
 from terratorch.models.model import (
     AuxiliaryHead,
     AuxiliaryHeadWithDecoderWithoutInstantiatedHead,
     Model,
     ModelFactory,
 )
-from terratorch.models.necks import Neck, build_neck_list, NeckSequential
+from terratorch.models.necks import Neck, NeckSequential, build_neck_list
 from terratorch.models.peft_utils import get_peft_backbone
 from terratorch.models.pixel_wise_model import PixelWiseModel
 from terratorch.models.scalar_output_model import ScalarOutputModel
-from terratorch.models.embedding_output_model import EmbeddingOutputModel
-from terratorch.models.utils import extract_prefix_keys, TemporalWrapper
+from terratorch.models.utils import TemporalWrapper, extract_prefix_keys
 from terratorch.registry import BACKBONE_REGISTRY, DECODER_REGISTRY, MODEL_FACTORY_REGISTRY
 
 from .utils import _get_backbone
-
 
 PIXEL_WISE_TASKS = ["segmentation", "regression"]
 SCALAR_TASKS = ["classification", "scalar_regression"]
@@ -38,36 +38,38 @@ def _get_decoder_and_head_kwargs(
     num_outputs: int | None = None,
     num_classes: int | None = None,
 ) -> tuple[nn.Module, dict, bool]:
-    
+
     if num_outputs is not None and num_classes is not None:
         raise ValueError("Only one of `num_outputs` or `num_classes` should be provided.")
-    
+
     # if its already an nn Module, check if it includes a head. if it doesnt, pass num classes/num outputs to head kwargs
     if isinstance(decoder, nn.Module):
         includes_head = getattr(decoder, "includes_head", False)
-        
-        if includes_head and head_kwargs: 
+
+        if includes_head and head_kwargs:
             msg = "Decoder already includes a head, but `head_` arguments were specified. These should be removed."
             raise ValueError(msg)
-        
+
         if not includes_head:
             if num_outputs is not None:
                 head_kwargs["num_outputs"] = num_outputs
             elif num_classes is not None:
                 head_kwargs["num_classes"] = num_classes
-                    
+
         return decoder, head_kwargs, False
 
     # if its not an nn module, check if the class includes a head
     # depending on that, pass num classes/num outputs to either head kwrags or decoder
     if hasattr(DECODER_REGISTRY.find_class(decoder), "includes_head"):
         includes_head = DECODER_REGISTRY.find_registry(decoder).includes_head
-        
+
     else:
         includes_head = False
-        msg = (f"Decoder {decoder} does not have an `includes_head` attribute. Falling back to the value of the registry.")
+        msg = (
+            f"Decoder {decoder} does not have an `includes_head` attribute. Falling back to the value of the registry."
+        )
         logging.debug(msg)
-    
+
     key = "num_outputs" if num_outputs is not None else "num_classes"
     num_outputs = num_outputs or num_classes
     if num_outputs is not None:
@@ -102,7 +104,7 @@ class EncoderDecoderFactory(ModelFactory):
         backbone_kwargs: dict | None = None,
         decoder_kwargs: dict | None = None,
         head_kwargs: dict | None = None,
-        num_classes: int |None = None,
+        num_classes: int | None = None,
         num_outputs: int | None = None,
         necks: list[dict] | None = None,
         aux_decoders: list[AuxiliaryHead] | None = None,
@@ -129,9 +131,9 @@ class EncoderDecoderFactory(ModelFactory):
                     Defaults to "FCNDecoder". Defaults to 'None' for embedding generation tasks.
             backbone_kwargs (dict, optional) : Arguments to be passed to instantiate the backbone.
             decoder_kwargs (dict, optional) : Arguments to be passed to instantiate the decoder.
-            head_kwargs (dict, optional) : Arguments to be passed to the head network. 
+            head_kwargs (dict, optional) : Arguments to be passed to the head network.
             num_classes (int, optional): Number of classes for segmentation and classification tasks.
-            num_outputs (int, optional):  Number of variables to predict if task is regression. 
+            num_outputs (int, optional):  Number of variables to predict if task is regression.
             necks (list[dict]): nn.Modules to be called in succession on encoder features
                 before passing them to the decoder. Should be registered in the NECKS_REGISTRY registry.
                 Expects each one to have a key "name" and subsequent keys for arguments, if any.
@@ -167,7 +169,6 @@ class EncoderDecoderFactory(ModelFactory):
             backbone_kwargs, kwargs = extract_prefix_keys(kwargs, "backbone_")
 
         backbone = _get_backbone(backbone, **backbone_kwargs)
-
 
         # If patch size is not provided in the config or by the model, it might lead to errors due to irregular images.
         patch_size = backbone_kwargs.get("patch_size", None)
@@ -227,7 +228,7 @@ class EncoderDecoderFactory(ModelFactory):
                     necks=neck_list,
                     decoder_includes_head=decoder_includes_head,
                     rescale=rescale,
-                    image_size_out=image_size_out
+                    image_size_out=image_size_out,
                 )
 
             to_be_aux_decoders: list[AuxiliaryHeadWithDecoderWithoutInstantiatedHead] = []
@@ -236,10 +237,17 @@ class EncoderDecoderFactory(ModelFactory):
                 aux_decoder_kwargs, args = extract_prefix_keys(args, "decoder_")
                 aux_head_kwargs, args = extract_prefix_keys(args, "head_")
                 aux_decoder_instance, aux_head_kwargs, aux_decoder_includes_head = _get_decoder_and_head_kwargs(
-                    aux_decoder.decoder, channel_list, aux_decoder_kwargs, aux_head_kwargs, num_outputs=num_outputs, num_classes=num_classes
+                    aux_decoder.decoder,
+                    channel_list,
+                    aux_decoder_kwargs,
+                    aux_head_kwargs,
+                    num_outputs=num_outputs,
+                    num_classes=num_classes,
                 )
                 to_be_aux_decoders.append(
-                    AuxiliaryHeadWithDecoderWithoutInstantiatedHead(aux_decoder.name, aux_decoder_instance, aux_head_kwargs)
+                    AuxiliaryHeadWithDecoderWithoutInstantiatedHead(
+                        aux_decoder.name, aux_decoder_instance, aux_head_kwargs
+                    )
                 )
                 _check_all_args_used(args)
 

@@ -1,7 +1,7 @@
 # Copyright contributors to the Terratorch project
 
+from collections.abc import Iterable, Iterator
 from random import choice
-from typing import Iterable, Iterator
 
 from torch.utils.data import Sampler
 from torchgeo.datasets import BoundingBox
@@ -12,7 +12,7 @@ class MultiSampler(Sampler[BoundingBox]):
     def __init__(self, samplers: Iterable[GeoSampler]) -> None:
         self.length = sum(map(len, samplers))
         self.samplers = samplers
-    
+
     def __len__(self) -> int:
         return self.length
 

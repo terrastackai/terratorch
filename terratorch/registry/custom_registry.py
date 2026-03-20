@@ -1,7 +1,7 @@
-import os 
 import importlib
-import sys 
-import logging 
+import logging
+import os
+import sys
 
 CUSTOM_MODULES_DIR_NAME = "custom_modules"
 
@@ -13,5 +13,3 @@ if os.path.exists(custom_modules_path) and os.path.isdir(custom_modules_path):
     sys.path.append(os.getcwd())
     logging.getLogger("terratorch").info(f"Found {CUSTOM_MODULES_DIR_NAME}")
     importlib.import_module(CUSTOM_MODULES_DIR_NAME)
-
-

@@ -19,6 +19,7 @@ from terratorch.datasets.utils import (
 
 class MChesapeakeLandcoverNonGeo(NonGeoDataset):
     """NonGeo dataset implementation for [M-ChesapeakeLandcover](https://github.com/ServiceNow/geo-bench?tab=readme-ov-file)."""
+
     all_band_names = ("BLUE", "GREEN", "NIR", "RED")
 
     rgb_bands = ("RED", "GREEN", "BLUE")

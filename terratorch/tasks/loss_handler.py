@@ -1,8 +1,8 @@
+from collections.abc import Callable
 
 import torch
-import torch.nn as nn
-from torch import Tensor
-from collections.abc import Callable
+from torch import Tensor, nn
+
 from terratorch.models.model import ModelOutput
 
 
@@ -41,7 +41,7 @@ class LossHandler:
                 If there are auxiliary heads, the main decode head is returned under the key "decode_head".
                 All other heads are returned with the same key as their name.
         """
-        
+
         loss = self._compute_loss(model_output.output, ground_truth, criterion)
         if isinstance(loss, Tensor):
             loss = {"loss": loss}

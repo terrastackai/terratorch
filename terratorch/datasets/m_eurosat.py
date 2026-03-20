@@ -18,6 +18,7 @@ from terratorch.datasets.utils import (
 
 class MEuroSATNonGeo(NonGeoDataset):
     """NonGeo dataset implementation for [M-EuroSAT](https://github.com/ServiceNow/geo-bench?tab=readme-ov-file)."""
+
     all_band_names = (
         "COASTAL_AEROSOL",
         "BLUE",
@@ -72,8 +73,7 @@ class MEuroSATNonGeo(NonGeoDataset):
 
         validate_bands(bands, self.all_band_names)
         self.bands = bands
-        self.band_indices = [self.all_band_names.index(b) for b in bands]\
-
+        self.band_indices = [self.all_band_names.index(b) for b in bands]
         self.data_root = Path(data_root)
         self.data_directory = self.data_root / self.data_dir
 

@@ -21,6 +21,7 @@ from terratorch.datasets.utils import (
 
 class MPv4gerNonGeo(NonGeoDataset):
     """NonGeo dataset implementation for [M-PV4GER](https://github.com/ServiceNow/geo-bench?tab=readme-ov-file)."""
+
     all_band_names = ("BLUE", "GREEN", "RED")
 
     rgb_bands = ("RED", "GREEN", "BLUE")

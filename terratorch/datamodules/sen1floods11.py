@@ -5,10 +5,10 @@ from typing import Any
 
 import albumentations as A
 import kornia.augmentation as K  # noqa: N812
+from kornia.augmentation import AugmentationSequential
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torchgeo.datamodules import NonGeoDataModule
-from kornia.augmentation import AugmentationSequential
 
 from terratorch.datamodules.utils import wrap_in_compose_is_list
 from terratorch.datasets import Sen1Floods11NonGeo
@@ -44,6 +44,7 @@ STDS = {
     "SWIR_1": 0.09772074,
     "SWIR_2": 0.07659938,
 }
+
 
 class Sen1Floods11NonGeoDataModule(NonGeoDataModule):
     """NonGeo LightningDataModule implementation for Fire Scars."""

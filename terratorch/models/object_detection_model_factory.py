@@ -1,29 +1,29 @@
 # Copyright contributors to the Terratorch project
 
-from dataclasses import dataclass
-from torch import nn
 import pdb
-from terratorch.models.model import (
-    Model,
-    ModelFactory,
-)
-from terratorch.models.necks import build_neck_list, NeckSequential
-from terratorch.models.model import ModelOutput
-from terratorch.models.utils import extract_prefix_keys
-from terratorch.registry import MODEL_FACTORY_REGISTRY
+from dataclasses import dataclass
+from functools import partial
 
+import numpy as np
+import torch
 import torchvision.models.detection
+from torch import nn
 from torchvision.models.detection.retinanet import RetinaNetHead
 from torchvision.models.detection.rpn import AnchorGenerator
 from torchvision.ops import MultiScaleRoIAlign
 
-import numpy as np
-from functools import partial
-import torch
-import pdb
-from .utils import _get_backbone, TerratorchGeneralizedRCNNTransform
+from terratorch.models.model import (
+    Model,
+    ModelFactory,
+    ModelOutput,
+)
+from terratorch.models.necks import NeckSequential, build_neck_list
+from terratorch.models.utils import extract_prefix_keys
+from terratorch.registry import MODEL_FACTORY_REGISTRY
 
-SUPPORTED_TASKS = ['object_detection']
+from .utils import TerratorchGeneralizedRCNNTransform, _get_backbone
+
+SUPPORTED_TASKS = ["object_detection"]
 
 
 def _check_all_args_used(kwargs):
@@ -32,7 +32,7 @@ def _check_all_args_used(kwargs):
 
     Args:
         kwargs: dict: Dictionary of arguments.
-    
+
     """
     if kwargs:
         msg = f"arguments {kwargs} were passed but not used."
@@ -76,12 +76,16 @@ class ObjectDetectionModelFactory(ModelFactory):
             raise NotImplementedError(msg)
         backbone_kwargs, kwargs = extract_prefix_keys(kwargs, "backbone_")
         framework_kwargs, kwargs = extract_prefix_keys(kwargs, "framework_")
-        
+
         backbone = _get_backbone(backbone, **backbone_kwargs)
-        if 'in_channels' in kwargs.keys():
-            in_channels = kwargs['in_channels']
+        if "in_channels" in kwargs.keys():
+            in_channels = kwargs["in_channels"]
         else:
-            in_channels = len(backbone_kwargs["model_bands"]) if "model_bands" in backbone_kwargs.keys() else len(backbone_kwargs["bands"])
+            in_channels = (
+                len(backbone_kwargs["model_bands"])
+                if "model_bands" in backbone_kwargs.keys()
+                else len(backbone_kwargs["bands"])
+            )
 
         try:
             out_channels = backbone.out_channels
@@ -97,16 +101,15 @@ class ObjectDetectionModelFactory(ModelFactory):
 
         combined_backbone = BackboneWrapper(backbone, neck_module, channel_list)
         # pdb.set_trace()
-        
-        if framework == 'faster-rcnn':
 
+        if framework == "faster-rcnn":
             sizes = ((32), (64), (128), (256), (512))
-            sizes = sizes[:len(combined_backbone.channel_list)]
+            sizes = sizes[: len(combined_backbone.channel_list)]
             aspect_ratios = ((0.5, 1.0, 2.0),) * len(sizes)
             anchor_generator = AnchorGenerator(sizes=sizes, aspect_ratios=aspect_ratios)
 
             roi_pooler = MultiScaleRoIAlign(
-                featmap_names=['feat0', 'feat1', 'feat2', 'feat3'], output_size=7, sampling_ratio=2
+                featmap_names=["feat0", "feat1", "feat2", "feat3"], output_size=7, sampling_ratio=2
             )
 
             model = torchvision.models.detection.FasterRCNN(
@@ -115,15 +118,14 @@ class ObjectDetectionModelFactory(ModelFactory):
                 rpn_anchor_generator=anchor_generator,
                 box_roi_pool=roi_pooler,
                 _skip_resize=True,
-                image_mean = np.repeat(0, in_channels),
-                image_std = np.repeat(1, in_channels),
-                **framework_kwargs
+                image_mean=np.repeat(0, in_channels),
+                image_std=np.repeat(1, in_channels),
+                **framework_kwargs,
             )
-            
-        elif framework == 'fcos':
 
+        elif framework == "fcos":
             sizes = ((8,), (16,), (32,), (64,), (128,), (256,))
-            sizes=sizes[:len(combined_backbone.channel_list)]
+            sizes = sizes[: len(combined_backbone.channel_list)]
             aspect_ratios = ((1.0,), (1.0,), (1.0,), (1.0,), (1.0,), (1.0,)) * len(sizes)
             anchor_generator = AnchorGenerator(
                 sizes=sizes,
@@ -131,17 +133,15 @@ class ObjectDetectionModelFactory(ModelFactory):
             )
 
             model = torchvision.models.detection.FCOS(
-                combined_backbone, 
+                combined_backbone,
                 num_classes,
-                anchor_generator=anchor_generator, 
+                anchor_generator=anchor_generator,
                 _skip_resize=True,
-                image_mean = np.repeat(0, in_channels),
-                image_std = np.repeat(1, in_channels),
-                **framework_kwargs
-
+                image_mean=np.repeat(0, in_channels),
+                image_std=np.repeat(1, in_channels),
+                **framework_kwargs,
             )
-        elif framework == 'retinanet':
-
+        elif framework == "retinanet":
             sizes = (
                 (16, 20, 25),
                 (32, 40, 50),
@@ -150,7 +150,7 @@ class ObjectDetectionModelFactory(ModelFactory):
                 (256, 322, 406),
                 (512, 645, 812),
             )
-            sizes=sizes[:len(combined_backbone.channel_list)]
+            sizes = sizes[: len(combined_backbone.channel_list)]
             aspect_ratios = ((0.5, 1.0, 2.0),) * len(sizes)
             anchor_generator = AnchorGenerator(sizes, aspect_ratios)
             head = RetinaNetHead(
@@ -168,23 +168,26 @@ class ObjectDetectionModelFactory(ModelFactory):
                 _skip_resize=True,
                 image_mean=np.repeat(0, in_channels),
                 image_std=np.repeat(1, in_channels),
-                **framework_kwargs
+                **framework_kwargs,
             )
 
-        elif framework == 'mask-rcnn':
-
+        elif framework == "mask-rcnn":
             sizes = ((32), (64), (128), (256), (512))
-            sizes = sizes[:len(combined_backbone.channel_list)]
+            sizes = sizes[: len(combined_backbone.channel_list)]
             aspect_ratios = ((0.5, 1.0, 2.0),) * len(sizes)
             anchor_generator = AnchorGenerator(sizes=sizes, aspect_ratios=aspect_ratios)
 
-            rpn_head = torchvision.models.detection.faster_rcnn.RPNHead(combined_backbone.out_channels, anchor_generator.num_anchors_per_location()[0], conv_depth=2)
+            rpn_head = torchvision.models.detection.faster_rcnn.RPNHead(
+                combined_backbone.out_channels, anchor_generator.num_anchors_per_location()[0], conv_depth=2
+            )
             box_head = torchvision.models.detection.faster_rcnn.FastRCNNConvFCHead(
                 (combined_backbone.out_channels, 7, 7), [256, 256, 256, 256], [1024], norm_layer=nn.BatchNorm2d
             )
-            mask_head = torchvision.models.detection.mask_rcnn.MaskRCNNHeads(combined_backbone.out_channels, [256, 256, 256, 256], 1, norm_layer=nn.BatchNorm2d)
+            mask_head = torchvision.models.detection.mask_rcnn.MaskRCNNHeads(
+                combined_backbone.out_channels, [256, 256, 256, 256], 1, norm_layer=nn.BatchNorm2d
+            )
             roi_pooler = MultiScaleRoIAlign(
-                featmap_names=['feat0', 'feat1', 'feat2', 'feat3'], output_size=7, sampling_ratio=2
+                featmap_names=["feat0", "feat1", "feat2", "feat3"], output_size=7, sampling_ratio=2
             )
 
             model = torchvision.models.detection.MaskRCNN(
@@ -199,7 +202,7 @@ class ObjectDetectionModelFactory(ModelFactory):
                 _skip_resize=True,
                 image_mean=np.repeat(0, in_channels),
                 image_std=np.repeat(1, in_channels),
-                **framework_kwargs
+                **framework_kwargs,
             )
 
         else:
@@ -209,18 +212,20 @@ class ObjectDetectionModelFactory(ModelFactory):
         # others dont include a head
         # for those, we dont pass num_classes
         # model.transform = IdentityTransform()
-        model.transform = TerratorchGeneralizedRCNNTransform(model.transform.min_size, 
-                                                             model.transform.max_size, 
-                                                             model.transform.image_mean, 
-                                                             model.transform.image_std,  
-                                                             model.transform.size_divisible, 
-                                                             model.transform.fixed_size,_skip_resize=model.transform._skip_resize)
+        model.transform = TerratorchGeneralizedRCNNTransform(
+            model.transform.min_size,
+            model.transform.max_size,
+            model.transform.image_mean,
+            model.transform.image_std,
+            model.transform.size_divisible,
+            model.transform.fixed_size,
+            _skip_resize=model.transform._skip_resize,
+        )
 
         return ObjectDetectionModel(model, framework)
 
 
 class BackboneWrapper(nn.Module):
-
     def __init__(self, backbone, necks, channel_list):
         """
         BackboneWrapper class that wraps a backbone and necks.
@@ -232,7 +237,7 @@ class BackboneWrapper(nn.Module):
 
         Returns:
             dict: Dictionary of output features from necks.
-        """   
+        """
         super().__init__()
         self.backbone = backbone
         self.necks = necks
@@ -242,23 +247,22 @@ class BackboneWrapper(nn.Module):
     def forward(self, x, **kwargs):
         """
         Forward pass of the model.
-        
+
         Parameters:
         x (torch.Tensor): Input tensor.
         **kwargs (dict): Additional keyword arguments.
-        
+
         Returns:
         torch.Tensor: Output tensor.
         """
         x = self.backbone(x, **kwargs)
         x = self.necks(x)
-        
+
         return x
 
 
 class ObjectDetectionModel(Model):
     def __init__(self, torchvision_model, model_name) -> None:
-
         """
         Wrapper for torchvision models.
 
@@ -277,11 +281,11 @@ class ObjectDetectionModel(Model):
     def forward(self, x, *args, **kwargs):
         """
         Forward pass of the model.
-        
+
         Parameters:
         x (torch.Tensor): Input tensor.
         **kwargs (dict): Additional keyword arguments.
-        
+
         Returns:
         torch.Tensor: Output tensor.
         """
@@ -298,15 +302,15 @@ class ObjectDetectionModel(Model):
         """
         Freeze the decoder of the model.
         """
-        if self.model_name == 'faster-rcnn':
+        if self.model_name == "faster-rcnn":
             for param in self.torchvision_model.rpn.parameters():
                 param.requires_grad = False
                 for param in self.torchvision_model.roi_heads.parameters():
                     param.requires_grad = False
-        elif self.model_name == 'fcos':
+        elif self.model_name == "fcos":
             for param in self.torchvision_model.head.parameters():
                 param.requires_grad = False
-        elif self.model_name == 'retinanet':
+        elif self.model_name == "retinanet":
             for param in self.torchvision_model.head.parameters():
                 param.requires_grad = False
         else:

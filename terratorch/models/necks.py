@@ -42,7 +42,6 @@ class NeckSequential(nn.Sequential):
         return x
 
 
-
 @TERRATORCH_NECK_REGISTRY.register
 class SelectIndices(Neck):
     def __init__(self, channel_list: list[int], indices: list[int]):
@@ -86,8 +85,8 @@ class AggregateTokens(Neck):
         """
         super().__init__(channel_list)
 
-        self.indices = indices or index # If indices is not set, use deprecated index, which defaults to -1.
-        if isinstance(self.indices, int): # Wrap int index/ indices to be list.
+        self.indices = indices or index  # If indices is not set, use deprecated index, which defaults to -1.
+        if isinstance(self.indices, int):  # Wrap int index/ indices to be list.
             self.indices = [self.indices]
 
         self.pooling = pooling.lower()
@@ -106,7 +105,7 @@ class AggregateTokens(Neck):
 
             if self.temporal_inputs:
                 # used for inputs with a separate time dim
-                timesteps = feat.shape[1] # shape is (B, T, ...), flatten time dim into B
+                timesteps = feat.shape[1]  # shape is (B, T, ...), flatten time dim into B
                 feat = rearrange(feat, "b t ... -> (b t) ...")
 
             if feat.dim() == 4:
@@ -114,7 +113,9 @@ class AggregateTokens(Neck):
                 B, C, H, W = feat.shape
                 feat = rearrange(feat, "b c h w -> b (h w) c")
 
-            elif feat.dim() == 5: # This is fallback for self.temporal_inputs not set, but we know that it is temporal shape
+            elif (
+                feat.dim() == 5
+            ):  # This is fallback for self.temporal_inputs not set, but we know that it is temporal shape
                 # Assuming spatiotemporal grid, flattening spatial dimension
                 B, C, T, H, W = feat.shape
                 feat = rearrange(feat, "b c t h w -> b (h w) t c")
@@ -223,7 +224,12 @@ class MaxpoolToPyramidal(Neck):
 @TERRATORCH_NECK_REGISTRY.register
 class ReshapeTokensToImage(Neck):
     def __init__(
-        self, channel_list: list[int], remove_cls_token=True, effective_time_dim: int = 1, h: int | None = None, temporal_inputs: bool = False,
+        self,
+        channel_list: list[int],
+        remove_cls_token=True,
+        effective_time_dim: int = 1,
+        h: int | None = None,
+        temporal_inputs: bool = False,
     ):
         """Reshape output of transformer encoder so it can be passed to a conv net.
 
@@ -257,7 +263,7 @@ class ReshapeTokensToImage(Neck):
         for x in features:
             if self.temporal_inputs:
                 # used for inputs with a separate time dim, effective_time_dim is used for inputs concatenated along channel dim
-                timesteps = x.shape[1] # shape is (B, T, ...), flatten time dim into B
+                timesteps = x.shape[1]  # shape is (B, T, ...), flatten time dim into B
                 x = rearrange(x, "b t ... -> (b t) ...")
             if x.dim() >= 4:
                 out.append(x)
@@ -280,14 +286,18 @@ class ReshapeTokensToImage(Neck):
                     patch_size = (np.prod(image_size) / tokens_per_timestep) ** 0.5
                     if patch_size % 1:
                         if self.remove_cls_token:
-                            warnings.warn(f"Cannot infer grid shape from input tokens ({x.shape[1]}), assuming a cls_token "
-                                          f"(default setting). Retry ReshapeTokensToImage with remove_cls_token to False. "
-                                          "Silence this warning with remove_cls_token=False for neck ReshapeTokensToImage.")
+                            warnings.warn(
+                                f"Cannot infer grid shape from input tokens ({x.shape[1]}), assuming a cls_token "
+                                f"(default setting). Retry ReshapeTokensToImage with remove_cls_token to False. "
+                                "Silence this warning with remove_cls_token=False for neck ReshapeTokensToImage."
+                            )
                             self.remove_cls_token = False
                             return self.forward(features, image_size, **kwargs)
                         else:
-                            raise ValueError(f"Cannot infer grid shape from from input tokens ({x.shape[1]}) with "
-                                             f"image_size = {image_size} in neck ReshapeTokensToImage. ")
+                            raise ValueError(
+                                f"Cannot infer grid shape from from input tokens ({x.shape[1]}) with "
+                                f"image_size = {image_size} in neck ReshapeTokensToImage. "
+                            )
                     img_h, _ = image_size
                     h = int(img_h // patch_size)
 
@@ -354,8 +364,10 @@ class LearnedInterpolateToPyramidal(Neck):
         self.embedding_dim = [channel_list[0] // 4, channel_list[1] // 2, channel_list[2], channel_list[3]]
 
         if torch.mps.is_available():
-            warnings.warn("MPS backend: enforcing .contiguous() to avoid non‑contiguous tensor issues "
-                          "on M‑series chips; may cause extra copies and slower execution.")
+            warnings.warn(
+                "MPS backend: enforcing .contiguous() to avoid non‑contiguous tensor issues "
+                "on M‑series chips; may cause extra copies and slower execution."
+            )
 
     def forward(self, features: list[torch.Tensor], **kwargs) -> list[torch.Tensor]:
         if torch.mps.is_available():

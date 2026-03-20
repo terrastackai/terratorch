@@ -1,7 +1,7 @@
 import importlib
+import logging
 import sys
 from collections.abc import Callable
-import logging 
 
 import timm
 import torch
@@ -28,15 +28,15 @@ SUPPORTED_TASKS = PIXEL_WISE_TASKS + SCALAR_TASKS
 class DecoderNotFoundError(Exception):
     pass
 
-class ModelWrapper(nn.Module):
 
+class ModelWrapper(nn.Module):
     def __init__(self, model: nn.Module = None) -> None:
 
-        super(ModelWrapper, self).__init__()
+        super().__init__()
 
         self.model = model
 
-        self.embedding_shape = self.model.model.state_dict()['decoder.embed_to_pixels.dem.bias'].shape[0]
+        self.embedding_shape = self.model.model.state_dict()["decoder.embed_to_pixels.dem.bias"].shape[0]
 
     def channels(self):
         return (1, self.embedding_shape)
@@ -47,10 +47,11 @@ class ModelWrapper(nn.Module):
 
     def forward(self, args, **kwargs):
         datacube = {}
-        datacube['pixels'] = args
-        datacube['timestep'] = None
-        datacube['latlon'] = None
+        datacube["pixels"] = args
+        datacube["timestep"] = None
+        datacube["latlon"] = None
         return self.model.forward(datacube)
+
 
 @MODEL_FACTORY_REGISTRY.register
 class ClayModelFactory(ModelFactory):
@@ -113,7 +114,7 @@ class ClayModelFactory(ModelFactory):
 
         # TODO: support auxiliary heads
         if not isinstance(backbone, nn.Module):
-            if not "clay" in backbone:
+            if "clay" not in backbone:
                 msg = "This class only handles models for `Clay` encoders"
                 raise NotImplementedError(msg)
 
@@ -158,8 +159,7 @@ class ClayModelFactory(ModelFactory):
         decoder_kwargs, kwargs = extract_prefix_keys(kwargs, "decoder_")
 
         # TODO: remove this
-        decoder: nn.Module = decoder_cls(
-            backbone.feature_info.channels(), **decoder_kwargs)
+        decoder: nn.Module = decoder_cls(backbone.feature_info.channels(), **decoder_kwargs)
         # decoder: nn.Module = decoder_cls([128, 256, 512, 1024], **decoder_kwargs)
 
         head_kwargs, kwargs = extract_prefix_keys(kwargs, "head_")
@@ -167,7 +167,14 @@ class ClayModelFactory(ModelFactory):
             head_kwargs["num_classes"] = num_classes
         if aux_decoders is None:
             return _build_appropriate_model(
-                task, backbone, decoder, head_kwargs, prepare_features_for_image_model, patch_size=patch_size, padding=padding, rescale=rescale
+                task,
+                backbone,
+                decoder,
+                head_kwargs,
+                prepare_features_for_image_model,
+                patch_size=patch_size,
+                padding=padding,
+                rescale=rescale,
             )
 
         to_be_aux_decoders: list[AuxiliaryHeadWithDecoderWithoutInstantiatedHead] = []
@@ -175,7 +182,7 @@ class ClayModelFactory(ModelFactory):
         for aux_decoder in aux_decoders:
             args = aux_decoder.decoder_args if aux_decoder.decoder_args else {}
             aux_decoder_cls: nn.Module = _get_decoder(aux_decoder.decoder)
-              
+
             aux_decoder_kwargs, kwargs = extract_prefix_keys(args, "decoder_")
             aux_decoder_instance = aux_decoder_cls(backbone.feature_info.channels(), **aux_decoder_kwargs)
             # aux_decoder_instance = aux_decoder_cls([128, 256, 512, 1024], **decoder_kwargs)
@@ -186,8 +193,7 @@ class ClayModelFactory(ModelFactory):
             # aux_head: nn.Module = _get_head(task, aux_decoder_instance, num_classes=num_classes, **head_kwargs)
             # aux_decoder.decoder = nn.Sequential(aux_decoder_instance, aux_head)
             to_be_aux_decoders.append(
-                AuxiliaryHeadWithDecoderWithoutInstantiatedHead(
-                    aux_decoder.name, aux_decoder_instance, aux_head_kwargs)
+                AuxiliaryHeadWithDecoderWithoutInstantiatedHead(aux_decoder.name, aux_decoder_instance, aux_head_kwargs)
             )
 
         return _build_appropriate_model(

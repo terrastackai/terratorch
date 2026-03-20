@@ -31,8 +31,8 @@ __all__ = (
     "MultiLabelClassificationTask",
     "ObjectDetectionTask",
     "PixelwiseRegressionTask",
-    "ScalarRegressionTask",
     "ReconstructionTask",
+    "ScalarRegressionTask",
     "SemanticSegmentationTask",
 )
 

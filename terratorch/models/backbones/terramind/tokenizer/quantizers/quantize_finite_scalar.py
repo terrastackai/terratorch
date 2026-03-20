@@ -13,10 +13,9 @@
 # limitations under the License.
 
 import torch
-from torch import nn
 import torch.nn.functional as F
-
-from einops import rearrange, pack, unpack
+from einops import pack, rearrange, unpack
+from torch import nn
 
 
 def pack_one(t, pattern):
@@ -40,13 +39,11 @@ class FiniteScalarQuantizer(nn.Module):
     ):
         super().__init__()
 
-        levels = [int(level) for level in codebook_size.split('-')]
+        levels = [int(level) for level in codebook_size.split("-")]
 
         _levels = torch.tensor(levels, dtype=torch.int)
         self.register_buffer("_levels", _levels, persistent=False)
-        _basis = torch.cumprod(
-            torch.tensor([1] + levels[:-1]), dim=0, dtype=torch.int
-        )
+        _basis = torch.cumprod(torch.tensor([1] + levels[:-1]), dim=0, dtype=torch.int)
         self.register_buffer("_basis", _basis, persistent=False)
 
         # initialize codebook
@@ -79,15 +76,14 @@ class FiniteScalarQuantizer(nn.Module):
 
     def forward(self, x):
         height, width = x.shape[-2:]
-        x = rearrange(x, 'b c h w -> b (h w) c')
+        x = rearrange(x, "b c h w -> b (h w) c")
 
         quantize, embed_ind = self.latent_to_code_and_indice(x)
 
-        quantize = rearrange(quantize, 'b (h w) c -> b c h w', h=height, w=width)
-        embed_ind = rearrange(embed_ind, 'b (h w) ... -> b h w ...', h=height, w=width)
+        quantize = rearrange(quantize, "b (h w) c -> b c h w", h=height, w=width)
+        embed_ind = rearrange(embed_ind, "b (h w) ... -> b h w ...", h=height, w=width)
 
         # no auxiliary losses needed for FSQ
         loss = torch.tensor([0.0], device=x.device, requires_grad=self.training)
 
         return quantize, loss, embed_ind
-    

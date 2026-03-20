@@ -9,7 +9,7 @@ from terratorch.models.backbones.clay_v15.model import clay_mae_base, clay_mae_l
 
 
 class ClayMAEModule(L.LightningModule):
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         model_size="base",
         mask_ratio=0.75,
@@ -70,9 +70,7 @@ class ClayMAEModule(L.LightningModule):
             #     print(f"Missing keys: {missing_keys}")
             #     print(f"Unexpected keys: {unexpected_keys}")
         else:
-            raise ValueError(
-                f"Invalid model size {model_size}. Expected one of {model_map.keys()}"
-            )
+            raise ValueError(f"Invalid model size {model_size}. Expected one of {model_map.keys()}")
 
     def on_train_epoch_start(self):
         self.model.teacher.eval()

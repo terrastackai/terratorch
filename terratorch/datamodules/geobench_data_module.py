@@ -4,8 +4,8 @@ from typing import Any
 import albumentations as A
 import kornia.augmentation as K  # noqa: N812
 import torch
-from torchgeo.datamodules import NonGeoDataModule
 from kornia.augmentation import AugmentationSequential
+from torchgeo.datamodules import NonGeoDataModule
 
 from terratorch.datamodules.utils import wrap_in_compose_is_list
 
@@ -39,9 +39,7 @@ class GeobenchDataModule(NonGeoDataModule):
         self.predict_transform = wrap_in_compose_is_list(predict_transform)
         self.data_root = data_root
         self.partition = partition
-        self.aug = (
-            AugmentationSequential(K.Normalize(self.means, self.stds), data_keys=None) if aug is None else aug
-        )
+        self.aug = AugmentationSequential(K.Normalize(self.means, self.stds), data_keys=None) if aug is None else aug
 
     def setup(self, stage: str) -> None:
         if stage in ["fit"]:

@@ -12,17 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
 import warnings
+
 import torch
-import logging
-from terratorch.registry import TERRATORCH_FULL_MODEL_REGISTRY
 from huggingface_hub import hf_hub_download
+
+from terratorch.registry import TERRATORCH_FULL_MODEL_REGISTRY
 
 logger = logging.getLogger("terramind")
 
 try:
     from .vqvae import VQVAE, DiVAE
+
     vqvae_available = True
     import_error = None
 except Exception as e:
@@ -31,7 +34,8 @@ except Exception as e:
     import_error = e
 
 try:
-    from .text.text_tokenizer import CoordsTokenizer, CaptionTokenizer
+    from .text.text_tokenizer import CaptionTokenizer, CoordsTokenizer
+
     tokenizers_available = True
     import_error_tokenizers = None
 except Exception as e:
@@ -42,18 +46,18 @@ except Exception as e:
 
 # Model definitions
 __all__ = [
-    "terramind_v1_tokenizer_s2l2a",
-    "terramind_v1_tokenizer_s1rtc",
-    "terramind_v1_tokenizer_s1grd",
+    "terramind_v01_caption_tokenizer",
+    "terramind_v01_tokenizer_dem",
+    "terramind_v01_tokenizer_lulc",
+    "terramind_v01_tokenizer_s1grd",
+    "terramind_v01_tokenizer_s2l2a",
+    "terramind_v1_coords_tokenizer",
     "terramind_v1_tokenizer_dem",
     "terramind_v1_tokenizer_lulc",
     "terramind_v1_tokenizer_ndvi",
-    "terramind_v01_tokenizer_s2l2a",
-    "terramind_v01_tokenizer_s1grd",
-    "terramind_v01_tokenizer_dem",
-    "terramind_v01_tokenizer_lulc",
-    "terramind_v01_caption_tokenizer",
-    "terramind_v1_coords_tokenizer",
+    "terramind_v1_tokenizer_s1grd",
+    "terramind_v1_tokenizer_s1rtc",
+    "terramind_v1_tokenizer_s2l2a",
 ]
 
 pretrained_weights = {
@@ -107,16 +111,15 @@ pretrained_weights = {
     },
 }
 
+
 def build_vqvae(
-        model_type: str = "divae",
-        variant: str = None,
-        pretrained: bool = False,
-        ckpt_path: str | None = None,
-        **kwargs):
+    model_type: str = "divae", variant: str = None, pretrained: bool = False, ckpt_path: str | None = None, **kwargs
+):
 
     if not vqvae_available:
-        warnings.warn(f"Cannot import VQVAE/DiVAE from terramind. "
-                      f"\nMake sure to install `pip install diffusers==0.30.0`.")
+        warnings.warn(
+            "Cannot import VQVAE/DiVAE from terramind. \nMake sure to install `pip install diffusers==0.30.0`."
+        )
         raise import_error
 
     if model_type == "divae":
@@ -137,8 +140,9 @@ def build_vqvae(
 
     elif pretrained:
         # Load model from Hugging Face
-        state_dict_file = hf_hub_download(repo_id=pretrained_weights[variant]["hf_hub_id"],
-                                          filename=pretrained_weights[variant]["hf_hub_filename"])
+        state_dict_file = hf_hub_download(
+            repo_id=pretrained_weights[variant]["hf_hub_id"], filename=pretrained_weights[variant]["hf_hub_filename"]
+        )
         state_dict = torch.load(state_dict_file, map_location="cpu", weights_only=True)
         model.load_state_dict(state_dict, strict=True)
 
@@ -166,7 +170,7 @@ def terramind_v1_tokenizer_s2l2a(**kwargs):
         codebook_size="8-8-8-6-5",
         latent_dim=5,
         clip_sample=True,
-        **kwargs
+        **kwargs,
     )
 
     return tokenizer
@@ -179,7 +183,7 @@ def terramind_v1_tokenizer_s1rtc(**kwargs):
 
     model args: Namespace(patch_size=16, input_size_min=224, input_size_max=256, resolution_step=32, input_size_enc=None, encoder_type="vit_b_enc", decoder_type="unet_patched", post_mlp=True, encoder_ckpt=None, full_ckpt=None, freeze_enc=False, from_scratch=True, dec_transformer_dropout=0.2, quantizer_type="fsq", codebook_size="8-8-8-6-5", latent_dim=5, norm_codes=True, norm_latents=False, codebook_weight=1.0, quantizer_ema_decay=0.99, coef_ema_dead_code=32.0, code_replacement_policy="batch_random", commitment_weight=1.0, kmeans_init=False, num_train_timesteps=1000, prediction_type="sample", beta_schedule="linear", zero_terminal_snr=True, cls_free_guidance_dropout=0.0, masked_cfg=False, masked_cfg_low=0, masked_cfg_high=None, thresholding=True, loss_fn="mse", conditioning="concat", resolution_cond=False, eval_res_cond=None, batch_size=1, accum_grad=1, batch_size_eval=None, epochs=100, stop_after_epoch=250, save_ckpt_freq=1, opt="adamw", opt_eps=1e-08, opt_betas=[0.9, 0.99], clip_grad=1.0, skip_grad=None, momentum=0.9, weight_decay=0.05, weight_decay_end=0.05, blr=0.0064, warmup_lr=1e-06, min_lr=0.0, warmup_epochs=1, warmup_steps=-1, dtype="fp16", model_ema=True, model_ema_decay=0.9999, model_ema_force_cpu=False, model_ema_update_freq=1, hflip=0.5, domain="sen1@264", mask_value=None, data_path="./data/MajorTOM-Core/train/", eval_data_path="./data/MajorTOM-Core/val", imagenet_default_mean_and_std=False, standardize_surface_normals=False, min_crop_scale=0.8, cache_datasets=False, dataset_size=None, sample_sentinel_data=True, num_seasons=1, num_locations=64, dist_eval=True, step_eval=True, eval_noise_schedule="DDIMScheduler", num_eval_timesteps=50, input_size_eval=[256], num_eval_metrics_samples=50000, eval_freq=1000, eval_metrics_freq=0, eval_image_log_freq=1000, num_logged_images=5, eval_only=False, no_inception=False, log_codebook_usage=True, output_dir="output/tokenization/divae/rgb/Sentinel1-ViTB-UNetP4_16k_224-264/2k_MajorTOM224256", device="cuda", seed=0, resume="output/tokenization/divae/rgb/Sentinel1-ViTB-UNetP4_16k_224-264/2k_MajorTOM224256/checkpoint_14.pth", auto_resume=True, start_epoch=15, num_workers=5, pin_mem=True, find_unused_params=True, log_wandb=True, wandb_project=None, wandb_entity="erik-scheurer", wandb_run_name="2048_2k_MajorTOM224-256", wandb_tags=[], show_user_warnings=False, world_size=32, local_rank=-1, dist_on_itp=False, dist_url="env://", run_name="tokenization/divae/rgb/Sentinel1-ViTB-UNetP4_16k_224-264", patch_size_dec=4, clip_sample=True, epoch_eval=False, config_path="/p/project/geofm4eo/scheurer2/4m4eo/cfgs/default/tokenization/divae/rgb/Sentinel1-ViTB-UNetP4_16k_224-264.yaml", rank=0, gpu=0, distributed=True, dist_backend="nccl", num_tasks=32, all_domains=["sen1@264"], input_size=256, lr=0.0001414213562373095, effective_batch_size=2048)
     """
-    
+
     tokenizer = build_vqvae(
         variant="terramind_v1_tokenizer_s1rtc",
         image_size=256,
@@ -194,10 +198,11 @@ def terramind_v1_tokenizer_s1rtc(**kwargs):
         codebook_size="8-8-8-6-5",
         latent_dim=5,
         clip_sample=True,
-        **kwargs
+        **kwargs,
     )
 
     return tokenizer
+
 
 @TERRATORCH_FULL_MODEL_REGISTRY.register
 def terramind_v1_tokenizer_s1grd(**kwargs):
@@ -206,7 +211,7 @@ def terramind_v1_tokenizer_s1grd(**kwargs):
 
     model args: Namespace(patch_size=16, input_size_min=224, input_size_max=256, resolution_step=32, input_size_enc=None, encoder_type="vit_b_enc", decoder_type="unet_patched", post_mlp=True, encoder_ckpt=None, full_ckpt=None, freeze_enc=False, from_scratch=True, dec_transformer_dropout=0.2, quantizer_type="fsq", codebook_size="8-8-8-6-5", latent_dim=5, norm_codes=True, norm_latents=False, codebook_weight=1.0, quantizer_ema_decay=0.99, coef_ema_dead_code=32.0, code_replacement_policy="batch_random", commitment_weight=1.0, kmeans_init=False, num_train_timesteps=1000, prediction_type="sample", beta_schedule="linear", zero_terminal_snr=True, cls_free_guidance_dropout=0.0, masked_cfg=False, masked_cfg_low=0, masked_cfg_high=None, thresholding=True, loss_fn="mse", conditioning="concat", resolution_cond=False, eval_res_cond=None, batch_size=1, batch_size_eval=None, epochs=100, save_ckpt_freq=1, opt="adamw", opt_eps=1e-08, opt_betas=[0.9, 0.99], clip_grad=1.0, skip_grad=None, momentum=0.9, weight_decay=0.05, weight_decay_end=0.05, blr=0.004266666667, warmup_lr=1e-06, min_lr=0.0, warmup_epochs=1, warmup_steps=-1, dtype="fp16", model_ema=True, model_ema_decay=0.9999, model_ema_force_cpu=False, model_ema_update_freq=1, hflip=0.5, domain="sen1@264", mask_value=None, data_path="../fm-geospatial/data/SSL4EOS12/train/", eval_data_path="../fm-geospatial/data/SSL4EOS12/train/", imagenet_default_mean_and_std=False, standardize_surface_normals=False, min_crop_scale=0.8, cache_datasets=False, use_wds=False, s3_endpoint="", s3_data_endpoint=None, wds_n_repeats=1, wds_shuffle_buffer_tar=1000, wds_shuffle_buffer_repeat=1000, s3_multipart_chunksize_mb=512, s3_multipart_threshold_mb=512, dataset_size=None, sample_sentinel_data=True, num_seasons=1, num_locations=64, dist_eval=True, step_eval=True, eval_noise_schedule="DDIMScheduler", num_eval_timesteps=50, input_size_eval=[256], num_eval_metrics_samples=5, eval_freq=5000, eval_metrics_freq=5000, eval_image_log_freq=5000, num_logged_images=15, eval_only=False, no_inception=False, log_codebook_usage=True, output_dir="../fm-geospatial/4m4eo-checkpoints/S1-SSL4EO-full-run/", device="cuda", seed=0, resume="", auto_resume=False, start_epoch=0, num_workers=10, pin_mem=True, find_unused_params=True, log_wandb=True, wandb_project="4m4eo", wandb_entity=None, wandb_run_name="divae/rgb/Sentinel1-ViTB-UNetP4_16k_224-264", wandb_tags=[], show_user_warnings=False, world_size=6, local_rank=-1, dist_on_itp=False, dist_url="env://", s3_path="", s3_save_dir="", run_name="tokenization/divae/rgb/Sentinel1-ViTB-UNetP4_16k_224-264", patch_size_dec=4, clip_sample=True, epoch_eval=False, config_path="cfgs/default/tokenization/divae/rgb/Sentinel1-ViTB-UNetP4_16k_224-264.yaml", rank=0, gpu=0, distributed=True, dist_backend="nccl", num_tasks=6, all_domains=["sen1@264"], input_size=256, lr=0.00010000000000781251)
     """
-    
+
     tokenizer = build_vqvae(
         variant="terramind_v1_tokenizer_s1grd",
         image_size=256,
@@ -221,7 +226,7 @@ def terramind_v1_tokenizer_s1grd(**kwargs):
         codebook_size="8-8-8-6-5",
         latent_dim=5,
         clip_sample=True,
-        **kwargs
+        **kwargs,
     )
 
     return tokenizer
@@ -234,7 +239,7 @@ def terramind_v1_tokenizer_dem(**kwargs):
 
     model args: Namespace(patch_size=16, input_size_min=256, input_size_max=256, resolution_step=32, input_size_enc=None, encoder_type="vit_b_enc", decoder_type="unet_patched", post_mlp=True, encoder_ckpt=None, full_ckpt=None, freeze_enc=False, from_scratch=True, dec_transformer_dropout=0.2, quantizer_type="fsq", codebook_size="8-8-8-6-5", latent_dim=5, norm_codes=True, norm_latents=False, codebook_weight=1.0, quantizer_ema_decay=0.99, coef_ema_dead_code=32.0, code_replacement_policy="batch_random", commitment_weight=1.0, kmeans_init=False, num_train_timesteps=1000, prediction_type="sample", beta_schedule="linear", zero_terminal_snr=True, cls_free_guidance_dropout=0.0, masked_cfg=False, masked_cfg_low=0, masked_cfg_high=None, thresholding=True, loss_fn="mse", conditioning="concat", resolution_cond=False, eval_res_cond=None, batch_size=1, accum_grad=2, batch_size_eval=None, epochs=20, stop_after_epoch=250, save_ckpt_freq=1, opt="adamw", opt_eps=1e-08, opt_betas=[0.9, 0.99], clip_grad=1.0, skip_grad=None, momentum=0.9, weight_decay=0.05, weight_decay_end=0.05, blr=0.0064, warmup_lr=1e-06, min_lr=0.0, warmup_epochs=1, warmup_steps=-1, dtype="fp16", model_ema=True, model_ema_decay=0.9999, model_ema_force_cpu=False, model_ema_update_freq=1, hflip=0.5, domain="dem@264", mask_value=None, data_path="./data/TerraMesh/train", eval_data_path="./data/TerraMesh/val", imagenet_default_mean_and_std=False, standardize_surface_normals=False, min_crop_scale=0.8, cache_datasets=False, dataset_size=None, sample_sentinel_data=False, num_seasons=1, num_locations=64, dist_eval=True, step_eval=True, eval_noise_schedule="DDIMScheduler", num_eval_timesteps=50, input_size_eval=[256], num_eval_metrics_samples=5, eval_freq=2000, eval_metrics_freq=0, eval_image_log_freq=2000, num_logged_images=5, eval_only=False, no_inception=False, log_codebook_usage=True, output_dir="artifacts/runs/sm-dem-20-epochs", device="cuda", seed=0, resume="artifacts/runs/sm-dem-20-epochs/checkpoint_12.pth", auto_resume=True, start_epoch=13, num_workers=8, pin_mem=True, find_unused_params=True, log_wandb=True, wandb_project="terramind-dem", wandb_entity="fasteo-ibm-jsc", wandb_run_name="2048_epochs_20/divae/rgb/DEM-ViTB-UNetP4_16k_224-264", wandb_run_id=None, wandb_tags=[], show_user_warnings=False, world_size=16, local_rank=-1, dist_on_itp=False, dist_url="env://", run_name="tokenization/divae/rgb/DEM-ViTB-UNetP4_16k_224-264", patch_size_dec=4, clip_sample=True, epoch_eval=False, config_path="/p/home/jusers/maurogiovanni1/juwels/4m4eo/cfgs/default/tokenization/divae/rgb/DEM-ViTB-UNetP4_16k_224-264.yaml", rank=0, gpu=0, distributed=True, dist_backend="nccl", num_tasks=16, all_domains=["dem@264"], input_size=256, lr=0.0001414213562373095, effective_batch_size=2048)
     """
-    
+
     tokenizer = build_vqvae(
         variant="terramind_v1_tokenizer_dem",
         image_size=256,
@@ -249,7 +254,7 @@ def terramind_v1_tokenizer_dem(**kwargs):
         codebook_size="8-8-8-6-5",
         latent_dim=5,
         clip_sample=True,
-        **kwargs
+        **kwargs,
     )
 
     return tokenizer
@@ -276,11 +281,10 @@ def terramind_v1_tokenizer_lulc(**kwargs):
         quant_type="fsq",
         codebook_size="7-5-5-5-5",
         latent_dim=5,
-        **kwargs
+        **kwargs,
     )
 
     return tokenizer
-
 
 
 @TERRATORCH_FULL_MODEL_REGISTRY.register
@@ -305,7 +309,7 @@ def terramind_v1_tokenizer_ndvi(**kwargs):
         codebook_size="8-8-8-6-5",
         latent_dim=5,
         clip_sample=True,
-        **kwargs
+        **kwargs,
     )
 
     return tokenizer
@@ -336,7 +340,7 @@ def terramind_v01_tokenizer_s2l2a(**kwargs):
         codebook_size="8-8-8-6-5",
         latent_dim=5,
         clip_sample=True,
-        **kwargs
+        **kwargs,
     )
 
     return tokenizer
@@ -367,7 +371,7 @@ def terramind_v01_tokenizer_s1grd(**kwargs):
         codebook_size="8-8-8-6-5",
         latent_dim=5,
         clip_sample=True,
-        **kwargs
+        **kwargs,
     )
 
     return tokenizer
@@ -398,7 +402,7 @@ def terramind_v01_tokenizer_dem(**kwargs):
         codebook_size="8-8-8-6-5",
         latent_dim=5,
         clip_sample=True,
-        **kwargs
+        **kwargs,
     )
 
     return tokenizer
@@ -429,7 +433,7 @@ def terramind_v01_tokenizer_lulc(**kwargs):
         quant_type="fsq",
         codebook_size="7-5-5-5-5",
         latent_dim=5,
-        **kwargs
+        **kwargs,
     )
 
     return tokenizer
@@ -437,35 +441,27 @@ def terramind_v01_tokenizer_lulc(**kwargs):
 
 def terramind_v01_caption_tokenizer(pretrained=True, tokenizer_file=None, *args, **kwargs):
     if not tokenizers_available:
-        warnings.warn(f"Cannot import tokenizers. "
-                      f"\nMake sure to install `pip install tokenizers`.")
+        warnings.warn("Cannot import tokenizers. \nMake sure to install `pip install tokenizers`.")
         raise import_error_tokenizers
 
     if pretrained and tokenizer_file is None:
         tokenizer_file = hf_hub_download(
             repo_id=pretrained_weights["terramind_v01_caption_tokenizer"]["hf_hub_id"],
-            filename=pretrained_weights["terramind_v01_caption_tokenizer"]["hf_hub_filename"]
+            filename=pretrained_weights["terramind_v01_caption_tokenizer"]["hf_hub_filename"],
         )
 
-    return CaptionTokenizer(
-        tokenizer_file=tokenizer_file,
-        *args, **kwargs
-    )
+    return CaptionTokenizer(tokenizer_file=tokenizer_file, *args, **kwargs)
 
 
 def terramind_v1_coords_tokenizer(pretrained=True, tokenizer_file=None, *args, **kwargs):
     if not tokenizers_available:
-        warnings.warn(f"Cannot import tokenizers. "
-                      f"\nMake sure to install `pip install tokenizers`.")
+        warnings.warn("Cannot import tokenizers. \nMake sure to install `pip install tokenizers`.")
         raise import_error_tokenizers
 
     if pretrained and tokenizer_file is None:
         tokenizer_file = hf_hub_download(
             repo_id=pretrained_weights["terramind_v1_coords_tokenizer"]["hf_hub_id"],
-            filename=pretrained_weights["terramind_v1_coords_tokenizer"]["hf_hub_filename"]
+            filename=pretrained_weights["terramind_v1_coords_tokenizer"]["hf_hub_filename"],
         )
 
-    return CoordsTokenizer(
-        tokenizer_file=tokenizer_file,
-        *args, **kwargs
-    )
+    return CoordsTokenizer(tokenizer_file=tokenizer_file, *args, **kwargs)

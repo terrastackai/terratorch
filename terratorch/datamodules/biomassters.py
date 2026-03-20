@@ -2,13 +2,13 @@ from collections.abc import Sequence
 from typing import Any
 
 import albumentations as A
+from kornia.augmentation import AugmentationSequential
 from torch.utils.data import DataLoader
+from torchgeo.datamodules import NonGeoDataModule
 
 from terratorch.datamodules.generic_multimodal_data_module import MultimodalNormalize, wrap_in_compose_is_list
 from terratorch.datamodules.generic_pixel_wise_data_module import Normalize
 from terratorch.datasets import BioMasstersNonGeo
-from torchgeo.datamodules import NonGeoDataModule
-from kornia.augmentation import AugmentationSequential
 
 MEANS = {
     "AGBM": 63.4584,
@@ -18,7 +18,7 @@ MEANS = {
         "VV_Desc": 0.08556002,
         "VH_Desc": 0.02795591,
         "RVI_Asc": 0.75507677,
-        "RVI_Desc": 0.6600374
+        "RVI_Desc": 0.6600374,
     },
     "S2": {
         "BLUE": 1633.0802,
@@ -31,8 +31,8 @@ MEANS = {
         "NIR_NARROW": 2685.8281,
         "SWIR_1": 1023.90204,
         "SWIR_2": 696.48755,
-        "CLOUD_PROBABILITY": 21.177078
-    }
+        "CLOUD_PROBABILITY": 21.177078,
+    },
 }
 
 STDS = {
@@ -43,7 +43,7 @@ STDS = {
         "VV_Desc": 0.19260046,
         "VH_Desc": 0.10272296,
         "RVI_Asc": 0.24945821,
-        "RVI_Desc": 0.3590119
+        "RVI_Desc": 0.3590119,
     },
     "S2": {
         "BLUE": 2499.7146,
@@ -56,9 +56,10 @@ STDS = {
         "NIR_NARROW": 2031.7762,
         "SWIR_1": 934.0556,
         "SWIR_2": 759.8444,
-        "CLOUD_PROBABILITY": 49.352486
-    }
+        "CLOUD_PROBABILITY": 49.352486,
+    },
 }
+
 
 class BioMasstersNonGeoDataModule(NonGeoDataModule):
     """NonGeo LightningDataModule implementation for BioMassters datamodule."""
@@ -240,5 +241,5 @@ class BioMasstersNonGeoDataModule(NonGeoDataModule):
             shuffle=split == "train",
             num_workers=self.num_workers,
             collate_fn=self.collate_fn,
-            drop_last=split =="train" and self.drop_last,
+            drop_last=split == "train" and self.drop_last,
         )

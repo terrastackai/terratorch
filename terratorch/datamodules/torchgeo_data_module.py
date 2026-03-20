@@ -2,20 +2,21 @@
 
 """Ugly proxy objects so parsing config file works with transforms.
 
-    These are necessary since, for LightningCLI to instantiate arguments as
-    objects from the config, they must have type annotations
+These are necessary since, for LightningCLI to instantiate arguments as
+objects from the config, they must have type annotations
 
-    In TorchGeo, `transforms` is passed in **kwargs, so it has no type annotations!
-    To get around that, we create these wrappers that have transforms type annotated.
-    They create the transforms and forward all method and attribute calls to the
-    original TorchGeo datamodule.
+In TorchGeo, `transforms` is passed in **kwargs, so it has no type annotations!
+To get around that, we create these wrappers that have transforms type annotated.
+They create the transforms and forward all method and attribute calls to the
+original TorchGeo datamodule.
 
-    Additionally, TorchGeo datasets pass the data to the transforms callable
-    as a dict, and as a tensor.
+Additionally, TorchGeo datasets pass the data to the transforms callable
+as a dict, and as a tensor.
 
-    Albumentations expects this data not as a dict but as different key-value
-    arguments, and as numpy. We handle that conversion here. 
+Albumentations expects this data not as a dict but as different key-value
+arguments, and as numpy. We handle that conversion here.
 """
+
 from collections.abc import Callable
 from typing import Any
 

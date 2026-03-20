@@ -4,8 +4,8 @@
 """World Settlement Footprint datasets."""
 
 import abc
-from collections.abc import Iterable, Sequence
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable, Iterable, Sequence
+from typing import Any, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,11 +31,11 @@ class WSF(RasterDataset, abc.ABC):
 
     def init(
         self,
-        paths: Union[str, Iterable[str]] = "data",
-        crs: Optional[CRS] = None,
-        res: Optional[float] = None,
-        transforms: Optional[Callable[[dict[str, Any]], dict[str, Any]]] = None,
-        cache: bool = True
+        paths: str | Iterable[str] = "data",
+        crs: CRS | None = None,
+        res: float | None = None,
+        transforms: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        cache: bool = True,
     ) -> None:
         """Initialize a new dataset instance.
 
@@ -53,7 +53,7 @@ class WSF(RasterDataset, abc.ABC):
 
         Raises:
             FileNotFoundError: if no files are found in ``paths``
-        """  # noqa: E501
+        """
 
         super().__init__(paths, crs, res, transforms=transforms, cache=cache)
 
@@ -61,7 +61,7 @@ class WSF(RasterDataset, abc.ABC):
         self,
         sample: dict[str, Any],
         show_titles: bool = True,
-        suptitle: Optional[str] = None,
+        suptitle: str | None = None,
     ) -> plt.Figure:
         """Plot a sample from the dataset.
         Args:
@@ -70,7 +70,7 @@ class WSF(RasterDataset, abc.ABC):
             suptitle: optional string to use as a suptitle
         Returns:
             a matplotlib Figure with the rendered sample
-        """  # noqa: E501
+        """
 
         mask = sample["mask"].squeeze().numpy()
         mask = np.where(mask == 0, np.nan, mask)
@@ -97,7 +97,7 @@ class WSF2019(WSF):
     `DLR <https://dlr.de/>`_, provides a raster, geo-referenced, single-layer
     global built settlement land cover map. The data was created with both
     Sentinel 1 and 2 satellite imagery.
-    """  # noqa: E501
+    """
 
     filename_glob = "WSF2019_v1_*.tif"
     cmap = "binary_r"
@@ -109,11 +109,11 @@ class WSFEvolution(WSF):
     The `World Settlement Footprint Evolution Version 1 dataset
     <https://download.geoservice.dlr.de/WSF_EVO/>`__, created and hosted by
     `DLR <https://dlr.de/>`_, provides a raster, geo-referenced, single-layer
-    global built settlement land cover map. The WSF Evolution mask defines one 
+    global built settlement land cover map. The WSF Evolution mask defines one
     value per pixel corresponding to the year between 1985 and 2015 when built
     settlements were identified, or zero otherwise. The data was created with a
     mix of Landsat and Sentinel satellite imagery.
-    """  # noqa: E501
+    """
 
     filename_glob = "WSFevolution_v1_*.tif"
     cmap = "RdYlGn"

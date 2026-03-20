@@ -52,7 +52,7 @@ class Attention(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         dim,
         depth,
@@ -68,9 +68,7 @@ class Transformer(nn.Module):
             self.layers.append(
                 nn.ModuleList(
                     [
-                        Attention(
-                            dim, heads=heads, dim_head=dim_head, fused_attn=fused_attn
-                        ),
+                        Attention(dim, heads=heads, dim_head=dim_head, fused_attn=fused_attn),
                         FeedForward(dim, mlp_dim),
                     ]
                 )

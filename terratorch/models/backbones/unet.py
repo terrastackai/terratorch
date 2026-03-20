@@ -3,18 +3,18 @@ import warnings
 from typing import Dict
 
 import torch
-from torch.nn import Upsample as Upsample
-import torch.nn as nn
 import torch.utils.checkpoint as cp
-
+from torch import nn
+from torch.nn import Upsample as Upsample
 from torch.nn.modules.batchnorm import _BatchNorm
 from torch.nn.modules.instancenorm import _InstanceNorm
+
 SyncBatchNorm_ = nn.SyncBatchNorm
 
-from terratorch.models.backbones.utils import UpConvBlock, BasicConvBlock
+from terratorch.models.backbones.utils import BasicConvBlock, UpConvBlock
 from terratorch.models.decoders.utils import ConvModule
-
 from terratorch.registry import TERRATORCH_BACKBONE_REGISTRY
+
 
 @TERRATORCH_BACKBONE_REGISTRY.register
 class UNet(nn.Module):
@@ -75,79 +75,82 @@ class UNet(nn.Module):
         in `UNet._check_input_divisible`.
     """
 
-    def __init__(self,
-                 in_channels=3,
-                 out_channels=64,
-                 num_stages=5,
-                 strides=(1, 1, 1, 1, 1),
-                 enc_num_convs=(2, 2, 2, 2, 2),
-                 dec_num_convs=(2, 2, 2, 2),
-                 downsamples=(True, True, True, True),
-                 enc_dilations=(1, 1, 1, 1, 1),
-                 dec_dilations=(1, 1, 1, 1),
-                 with_cp=False,
-                 conv_cfg=None,
-                 norm_cfg=dict(type='BN'),
-                 act_cfg=dict(type='ReLU'),
-                 upsample_cfg=None,
-                 norm_eval=False,
-                 dcn=None,
-                 plugins=None,
-                 pretrained=None,
-                 init_cfg=None):
-        super(UNet, self).__init__()
+    def __init__(
+        self,
+        in_channels=3,
+        out_channels=64,
+        num_stages=5,
+        strides=(1, 1, 1, 1, 1),
+        enc_num_convs=(2, 2, 2, 2, 2),
+        dec_num_convs=(2, 2, 2, 2),
+        downsamples=(True, True, True, True),
+        enc_dilations=(1, 1, 1, 1, 1),
+        dec_dilations=(1, 1, 1, 1),
+        with_cp=False,
+        conv_cfg=None,
+        norm_cfg=dict(type="BN"),
+        act_cfg=dict(type="ReLU"),
+        upsample_cfg=None,
+        norm_eval=False,
+        dcn=None,
+        plugins=None,
+        pretrained=None,
+        init_cfg=None,
+    ):
+        super().__init__()
 
         self.pretrained = pretrained
-        assert not (init_cfg and pretrained), \
-            'init_cfg and pretrained cannot be setting at the same time'
+        assert not (init_cfg and pretrained), "init_cfg and pretrained cannot be setting at the same time"
         if isinstance(pretrained, str):
-            warnings.warn('DeprecationWarning: pretrained is a deprecated, '
-                          'please use "init_cfg" instead')
-            self.init_cfg = dict(type='Pretrained', checkpoint=pretrained)
+            warnings.warn('DeprecationWarning: pretrained is a deprecated, please use "init_cfg" instead')
+            self.init_cfg = dict(type="Pretrained", checkpoint=pretrained)
         elif pretrained is None:
             if init_cfg is None:
                 self.init_cfg = [
-                    dict(type='Kaiming', layer='Conv2d'),
-                    dict(
-                        type='Constant',
-                        val=1,
-                        layer=['_BatchNorm', 'GroupNorm'])
+                    dict(type="Kaiming", layer="Conv2d"),
+                    dict(type="Constant", val=1, layer=["_BatchNorm", "GroupNorm"]),
                 ]
         else:
-            raise TypeError('pretrained must be a str or None')
+            raise TypeError("pretrained must be a str or None")
 
-        assert dcn is None, 'Not implemented yet.'
-        assert plugins is None, 'Not implemented yet.'
-        assert len(strides) == num_stages, \
-            'The length of strides should be equal to num_stages, '\
-            f'while the strides is {strides}, the length of '\
-            f'strides is {len(strides)}, and the num_stages is '\
-            f'{num_stages}.'
-        assert len(enc_num_convs) == num_stages, \
-            'The length of enc_num_convs should be equal to num_stages, '\
-            f'while the enc_num_convs is {enc_num_convs}, the length of '\
-            f'enc_num_convs is {len(enc_num_convs)}, and the num_stages is '\
-            f'{num_stages}.'
-        assert len(dec_num_convs) == (num_stages-1), \
-            'The length of dec_num_convs should be equal to (num_stages-1), '\
-            f'while the dec_num_convs is {dec_num_convs}, the length of '\
-            f'dec_num_convs is {len(dec_num_convs)}, and the num_stages is '\
-            f'{num_stages}.'
-        assert len(downsamples) == (num_stages-1), \
-            'The length of downsamples should be equal to (num_stages-1), '\
-            f'while the downsamples is {downsamples}, the length of '\
-            f'downsamples is {len(downsamples)}, and the num_stages is '\
-            f'{num_stages}.'
-        assert len(enc_dilations) == num_stages, \
-            'The length of enc_dilations should be equal to num_stages, '\
-            f'while the enc_dilations is {enc_dilations}, the length of '\
-            f'enc_dilations is {len(enc_dilations)}, and the num_stages is '\
-            f'{num_stages}.'
-        assert len(dec_dilations) == (num_stages-1), \
-            'The length of dec_dilations should be equal to (num_stages-1), '\
-            f'while the dec_dilations is {dec_dilations}, the length of '\
-            f'dec_dilations is {len(dec_dilations)}, and the num_stages is '\
-            f'{num_stages}.'
+        assert dcn is None, "Not implemented yet."
+        assert plugins is None, "Not implemented yet."
+        assert len(strides) == num_stages, (
+            "The length of strides should be equal to num_stages, "
+            f"while the strides is {strides}, the length of "
+            f"strides is {len(strides)}, and the num_stages is "
+            f"{num_stages}."
+        )
+        assert len(enc_num_convs) == num_stages, (
+            "The length of enc_num_convs should be equal to num_stages, "
+            f"while the enc_num_convs is {enc_num_convs}, the length of "
+            f"enc_num_convs is {len(enc_num_convs)}, and the num_stages is "
+            f"{num_stages}."
+        )
+        assert len(dec_num_convs) == (num_stages - 1), (
+            "The length of dec_num_convs should be equal to (num_stages-1), "
+            f"while the dec_num_convs is {dec_num_convs}, the length of "
+            f"dec_num_convs is {len(dec_num_convs)}, and the num_stages is "
+            f"{num_stages}."
+        )
+        assert len(downsamples) == (num_stages - 1), (
+            "The length of downsamples should be equal to (num_stages-1), "
+            f"while the downsamples is {downsamples}, the length of "
+            f"downsamples is {len(downsamples)}, and the num_stages is "
+            f"{num_stages}."
+        )
+        assert len(enc_dilations) == num_stages, (
+            "The length of enc_dilations should be equal to num_stages, "
+            f"while the enc_dilations is {enc_dilations}, the length of "
+            f"enc_dilations is {len(enc_dilations)}, and the num_stages is "
+            f"{num_stages}."
+        )
+        assert len(dec_dilations) == (num_stages - 1), (
+            "The length of dec_dilations should be equal to (num_stages-1), "
+            f"while the dec_dilations is {dec_dilations}, the length of "
+            f"dec_dilations is {len(dec_dilations)}, and the num_stages is "
+            f"{num_stages}."
+        )
         self.num_stages = num_stages
         self.strides = strides
         self.downsamples = downsamples
@@ -162,13 +165,13 @@ class UNet(nn.Module):
             if i != 0:
                 if strides[i] == 1 and downsamples[i - 1]:
                     enc_conv_block.append(nn.MaxPool2d(kernel_size=2))
-                upsample = (strides[i] != 1 or downsamples[i - 1])
+                upsample = strides[i] != 1 or downsamples[i - 1]
                 self.decoder.append(
                     UpConvBlock(
                         conv_block=BasicConvBlock,
                         in_channels=out_channels * 2**i,
-                        skip_channels=out_channels * 2**(i - 1),
-                        out_channels=out_channels * 2**(i - 1),
+                        skip_channels=out_channels * 2 ** (i - 1),
+                        out_channels=out_channels * 2 ** (i - 1),
                         num_convs=dec_num_convs[i - 1],
                         stride=1,
                         dilation=dec_dilations[i - 1],
@@ -178,7 +181,9 @@ class UNet(nn.Module):
                         act_cfg=act_cfg,
                         upsample_cfg=upsample_cfg if upsample else None,
                         dcn=None,
-                        plugins=None))
+                        plugins=None,
+                    )
+                )
 
             enc_conv_block.append(
                 BasicConvBlock(
@@ -192,15 +197,17 @@ class UNet(nn.Module):
                     norm_cfg=norm_cfg,
                     act_cfg=act_cfg,
                     dcn=None,
-                    plugins=None))
-            self.encoder.append((nn.Sequential(*enc_conv_block)))
+                    plugins=None,
+                )
+            )
+            self.encoder.append(nn.Sequential(*enc_conv_block))
             in_channels = out_channels * 2**i
 
     def forward(self, x):
 
-        # We can check just the first image, since the batch 
+        # We can check just the first image, since the batch
         # already was approved by the stackability test, which means
-        # all images has the same dimensions. 
+        # all images has the same dimensions.
         self._check_input_divisible(x[0])
 
         enc_outs = []
@@ -216,7 +223,7 @@ class UNet(nn.Module):
     def train(self, mode=True):
         """Convert the model into training mode while keep normalization layer
         freezed."""
-        super(UNet, self).train(mode)
+        super().train(mode)
         if mode and self.norm_eval:
             for m in self.modules():
                 # trick: eval have effect on BatchNorm only
@@ -229,9 +236,9 @@ class UNet(nn.Module):
         for i in range(1, self.num_stages):
             if self.strides[i] == 2 or self.downsamples[i - 1]:
                 whole_downsample_rate *= 2
-        assert (h % whole_downsample_rate == 0) \
-            and (w % whole_downsample_rate == 0),\
-            f'The input image size {(h, w)} should be divisible by the whole '\
-            f'downsample rate {whole_downsample_rate}, when num_stages is '\
-            f'{self.num_stages}, strides is {self.strides}, and downsamples '\
-            f'is {self.downsamples}.'
+        assert (h % whole_downsample_rate == 0) and (w % whole_downsample_rate == 0), (
+            f"The input image size {(h, w)} should be divisible by the whole "
+            f"downsample rate {whole_downsample_rate}, when num_stages is "
+            f"{self.num_stages}, strides is {self.strides}, and downsamples "
+            f"is {self.downsamples}."
+        )

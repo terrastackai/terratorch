@@ -26,9 +26,7 @@ from torchvision.transforms import v2
 class EODataset(Dataset):
     """Reads different Earth Observation data sources from a directory."""
 
-    def __init__(
-        self, chips_path: List[Path], size: int, platforms: list, metadata: Box
-    ) -> None:
+    def __init__(self, chips_path: list[Path], size: int, platforms: list, metadata: Box) -> None:
         super().__init__()
         self.chips_path = chips_path
         self.size = size
@@ -59,24 +57,16 @@ class EODataset(Dataset):
             platform = chip_path.parent.name
             if platform == "sentinel-1-rtc":
                 pixels = chip["pixels"].astype(np.float32)
-                pixels[pixels <= 0] = (
-                    1e-10  # replace corrupted pixels in sentinel-1-rtc with small value
-                )
-                pixels = 10 * np.log10(
-                    pixels
-                )  # convert to dB scale, more interpretable pixels
+                pixels[pixels <= 0] = 1e-10  # replace corrupted pixels in sentinel-1-rtc with small value
+                pixels = 10 * np.log10(pixels)  # convert to dB scale, more interpretable pixels
             else:
                 pixels = chip["pixels"].astype(np.float32)
 
             pixels = torch.from_numpy(pixels)
             pixels = self.transforms[platform](pixels)
 
-            time_tensor = torch.tensor(
-                np.hstack((chip["week_norm"], chip["hour_norm"]), dtype=np.float32)
-            )
-            latlon_tensor = torch.tensor(
-                np.hstack((chip["lat_norm"], chip["lon_norm"]), dtype=np.float32)
-            )
+            time_tensor = torch.tensor(np.hstack((chip["week_norm"], chip["hour_norm"]), dtype=np.float32))
+            latlon_tensor = torch.tensor(np.hstack((chip["lat_norm"], chip["lon_norm"]), dtype=np.float32))
 
             # Randomly set time & latlon to zero for 20% of the chips
             if random.random() < 0.2:  # noqa: PLR2004
@@ -128,7 +118,7 @@ class ClaySampler(Sampler):
 
 
 class ClayDistributedSampler(Sampler):
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         dataset,
         platforms,
@@ -140,11 +130,7 @@ class ClayDistributedSampler(Sampler):
         self.dataset = dataset
         self.platforms = platforms
         self.batch_size = batch_size
-        self.num_replicas = (
-            num_replicas
-            if num_replicas is not None
-            else torch.distributed.get_world_size()
-        )
+        self.num_replicas = num_replicas if num_replicas is not None else torch.distributed.get_world_size()
         self.rank = rank if rank is not None else torch.distributed.get_rank()
         self.shuffle = shuffle
         self.epoch = 0
@@ -160,17 +146,12 @@ class ClayDistributedSampler(Sampler):
         # to match the max_len
         for platform, indices in self.platform_indices.items():
             if len(indices) < self.max_len:
-                extended_indices = np.tile(indices, (self.max_len // len(indices) + 1))[
-                    : self.max_len
-                ]
+                extended_indices = np.tile(indices, (self.max_len // len(indices) + 1))[: self.max_len]
                 self.adjusted_indices[platform] = extended_indices
             else:
                 self.adjusted_indices[platform] = indices
 
-        self.num_samples = math.ceil(
-            ((self.max_len * len(self.platforms)) - self.num_replicas)
-            / self.num_replicas
-        )
+        self.num_samples = math.ceil(((self.max_len * len(self.platforms)) - self.num_replicas) / self.num_replicas)
         self.total_size = self.num_samples * self.num_replicas
         self.num_samples_per_platform = self.max_len // self.num_replicas
 
@@ -218,7 +199,7 @@ def batch_collate(batch):
 
 
 class ClayDataModule(L.LightningDataModule):
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         data_dir: str = "data",
         size: int = 224,

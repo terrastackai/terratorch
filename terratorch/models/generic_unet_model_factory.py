@@ -19,6 +19,7 @@ def freeze_module(module: nn.Module):
     for param in module.parameters():
         param.requires_grad_(False)
 
+
 @MODEL_FACTORY_REGISTRY.register
 class GenericUnetModelFactory(ModelFactory):
     def _check_model_availability(self, model, builtin_engine, engine, **model_kwargs):
@@ -42,12 +43,12 @@ class GenericUnetModelFactory(ModelFactory):
 
         if model_class:
             model = model_class(
-               **model_kwargs,
+                **model_kwargs,
             )
         else:
             model = None
 
-        return model 
+        return model
 
     def build_model(
         self,
@@ -82,8 +83,8 @@ class GenericUnetModelFactory(ModelFactory):
         # Default values
         backbone_builtin_engine = None
         decoder_builtin_engine = None
-        backbone_engine = None 
-        decoder_engine = None 
+        backbone_engine = None
+        decoder_engine = None
         backbone_model_kwargs = {}
         decoder_model_kwargs = {}
 
@@ -103,29 +104,39 @@ class GenericUnetModelFactory(ModelFactory):
             backbone_engine = engine_encoders
             backbone_builtin_engine = builtin_engine_encoders
         else:
-            backbone=None
+            backbone = None
 
-        if decoder: 
+        if decoder:
             decoder_kwargs = _extract_prefix_keys(kwargs, "decoder_")
             decoder_model_kwargs = decoder_kwargs
             decoder_engine = engine_decoders
             decoder_builtin_engine = builtin_engine_decoders
         else:
-            decoder = None 
+            decoder = None
 
         if not backbone and not decoder:
             print("It is necessary to define a backbone and/or a decoder.")
 
-        # Instantianting backbone and decoder 
-        backbone = self._check_model_availability(backbone, backbone_builtin_engine, backbone_engine, **backbone_model_kwargs) 
-        decoder = self._check_model_availability(decoder, decoder_builtin_engine, decoder_engine, **decoder_model_kwargs) 
-
-        return GenericUnetModelWrapper(
-            backbone, decoder=decoder, relu=task == "regression" and regression_relu, squeeze_single_class=task == "regression"
+        # Instantianting backbone and decoder
+        backbone = self._check_model_availability(
+            backbone, backbone_builtin_engine, backbone_engine, **backbone_model_kwargs
+        )
+        decoder = self._check_model_availability(
+            decoder, decoder_builtin_engine, decoder_engine, **decoder_model_kwargs
         )
 
+        return GenericUnetModelWrapper(
+            backbone,
+            decoder=decoder,
+            relu=task == "regression" and regression_relu,
+            squeeze_single_class=task == "regression",
+        )
+
+
 class GenericUnetModelWrapper(Model, nn.Module):
-    def __init__(self, unet_model, decoder=None, relu=False, squeeze_single_class=False, intermediary_outputs_in_decoder=False) -> None:
+    def __init__(
+        self, unet_model, decoder=None, relu=False, squeeze_single_class=False, intermediary_outputs_in_decoder=False
+    ) -> None:
         super().__init__()
         self.unet_model = unet_model
         self.decoder = decoder
@@ -141,7 +152,7 @@ class GenericUnetModelWrapper(Model, nn.Module):
         if self.intermediary_outputs_in_decoder:
             self.catch_unet_outputs = lambda x: x
         else:
-            self.catch_unet_outputs =  lambda x: x[-1]
+            self.catch_unet_outputs = lambda x: x[-1]
 
     def _no_decoder(self, x):
         return x
@@ -153,7 +164,7 @@ class GenericUnetModelWrapper(Model, nn.Module):
     def forward(self, *args, **kwargs):
 
         # It supposes the input has dimension (B, C, H, W)
-        input_data = [args[0]] # It adapts the input to became a list of time 'snapshots'
+        input_data = [args[0]]  # It adapts the input to became a list of time 'snapshots'
         args = input_data
 
         unet_output = self.unet_model(*args, **kwargs)
@@ -189,4 +200,3 @@ def _extract_prefix_keys(d: dict, prefix: str) -> dict:
         del d[k]
 
     return extracted_dict
-

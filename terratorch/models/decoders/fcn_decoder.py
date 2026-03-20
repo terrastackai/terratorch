@@ -33,6 +33,7 @@ def _conv_upscale_block(input_channels, output_channels, kernel_size, stride, di
         nn.GELU(),
     )
 
+
 @TERRATORCH_DECODER_REGISTRY.register
 class FCNDecoder(nn.Module):
     """Fully Convolutional Decoder"""

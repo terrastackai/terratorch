@@ -4,17 +4,17 @@ import importlib
 import logging
 from collections.abc import Sequence
 from functools import partial
+from importlib import import_module
 from typing import Any
 
 import lightning
 import matplotlib.pyplot as plt
-from importlib import import_module
 import torch
 import torch.nn.functional as F
 from lightning.pytorch.callbacks import Callback
 from torch import Tensor, nn
 from torchgeo.datasets.utils import unbind_samples
-from torchmetrics import MeanAbsoluteError, MeanSquaredError, MetricCollection, R2Score, ClasswiseWrapper
+from torchmetrics import ClasswiseWrapper, MeanAbsoluteError, MeanSquaredError, MetricCollection, R2Score
 from torchmetrics.metric import Metric
 from torchmetrics.wrappers.abstract import WrapperMetric
 
@@ -47,10 +47,11 @@ class RootLossWrapper(nn.Module):
 
         msg = "Only 'mean' and None reduction supported"
         raise Exception(msg)
-    
+
+
 class WeightedMultivariateLossWrapper(nn.Module):
     """Wrapper to weight the individual losses of each variable predicted in the multivariate regression scenario."""
-    
+
     def __init__(self, loss_function: nn.Module, weights: torch.Tensor, reduction: None | str = "mean") -> None:
         super().__init__()
         if weights.ndim != 1:
@@ -58,19 +59,23 @@ class WeightedMultivariateLossWrapper(nn.Module):
         self.loss_function = loss_function
         self.register_buffer("weights", weights)
         self.reduction = reduction
-    
-    def forward(self, output: Tensor, target: Tensor,) -> Tensor:
+
+    def forward(
+        self,
+        output: Tensor,
+        target: Tensor,
+    ) -> Tensor:
         loss = self.loss_function(output, target)
-        weights = self.weights.view(1, -1, * ([1] * (loss.ndim - 2))) # [1, num_vars, 1, 1] for pixel-wise
-                
+        weights = self.weights.view(1, -1, *([1] * (loss.ndim - 2)))  # [1, num_vars, 1, 1] for pixel-wise
+
         weighted_loss = weights * loss
-        
+
         if self.reduction is None:
-            return weighted_loss # [B, num_vars, H, W] or [B, num_vars]
-        
-        if self.reduction == "mean": 
+            return weighted_loss  # [B, num_vars, H, W] or [B, num_vars]
+
+        if self.reduction == "mean":
             return weighted_loss.sum() / weights.expand_as(loss).sum()  # weighted scalar mean for backprop
-        
+
         msg = "Only 'mean' and None reduction supported"
         raise Exception(msg)
 
@@ -109,7 +114,7 @@ class IgnoreIndexLossWrapper(nn.Module):
         raise Exception(msg)
 
 
-class IgnoreIndexMetricWrapper(WrapperMetric): # to be fixed for multiple variable outputs 
+class IgnoreIndexMetricWrapper(WrapperMetric):  # to be fixed for multiple variable outputs
     """Wrapper over other metric that will ignore certain values.
 
     This class implements ignore_index by removing values where the target matches the ignored value.
@@ -124,7 +129,7 @@ class IgnoreIndexMetricWrapper(WrapperMetric): # to be fixed for multiple variab
         super().__init__()
         self.metric = wrapped_metric
         self.ignore_index = ignore_index
-        self.num_outputs = num_outputs # now only for scalar regression - needs to be rethinked for pixel-wise
+        self.num_outputs = num_outputs  # now only for scalar regression - needs to be rethinked for pixel-wise
 
     def update(self, preds: Tensor, target: Tensor) -> None:
         if self.num_outputs == 1:
@@ -137,10 +142,10 @@ class IgnoreIndexMetricWrapper(WrapperMetric): # to be fixed for multiple variab
                 preds = preds.flatten()
                 target = target.flatten()
             return self.metric.update(preds, target)
-        
+
         elif self.num_outputs > 1:
             if self.ignore_index is not None:
-                return NotImplementedError #TODO: expand to multivariate case both for pixel and scalar regression
+                return NotImplementedError  # TODO: expand to multivariate case both for pixel and scalar regression
             return self.metric.update(preds, target)
 
     def forward(self, preds: Tensor, target: Tensor, *args, **kwargs) -> Any:
@@ -160,22 +165,24 @@ class IgnoreIndexMetricWrapper(WrapperMetric): # to be fixed for multiple variab
     def reset(self) -> None:
         self.metric.reset()
 
+
 class WeightedMetricWrapper(WrapperMetric):
     def __init__(self, wrapped_metric: Metric, weights: list[float] | None, num_var: int) -> None:
         super().__init__()
         self.wrapped_metric = wrapped_metric
         if weights is not None:
             self.weights = torch.Tensor(weights)
-        else: 
+        else:
             self.weights = torch.ones(num_var)
-    
+
     def update(self, preds: Tensor, target: Tensor) -> None:
         return self.wrapped_metric.update(preds, target)
-    
+
     def compute(self) -> Tensor:
         values = self.wrapped_metric.compute()
-        weighted_values =  values * self.weights   
-        return weighted_values.sum() / self.weights.sum()    
+        weighted_values = values * self.weights
+        return weighted_values.sum() / self.weights.sum()
+
 
 def get_module_and_class(path):
     class_name = path.split(".")[-1]
@@ -183,7 +190,14 @@ def get_module_and_class(path):
     return path_, class_name
 
 
-def init_loss(loss: str, ignore_index: int = None, var_weights: list[float] = None, num_outputs: int = 1, custom_loss: bool = False, custom_loss_kwargs: dict = None):
+def init_loss(
+    loss: str,
+    ignore_index: int = None,
+    var_weights: list[float] = None,
+    num_outputs: int = 1,
+    custom_loss: bool = False,
+    custom_loss_kwargs: dict = None,
+):
     if custom_loss:
         assert custom_loss_kwargs, "If you are using a custom loss, the `custom_loss_kwargs` are required."
         base_criterion = _instantiate_from_path(loss, **custom_loss_kwargs)
@@ -193,26 +207,28 @@ def init_loss(loss: str, ignore_index: int = None, var_weights: list[float] = No
         base_criterion = IgnoreIndexLossWrapper(nn.L1Loss(reduction="none"), ignore_index)
     elif loss == "rmse":
         # IMPORTANT! Root is done only after ignore index! Otherwise, the mean taken is incorrect
-        base_criterion  = RootLossWrapper(IgnoreIndexLossWrapper(nn.MSELoss(reduction="none"), ignore_index), reduction=None)
+        base_criterion = RootLossWrapper(
+            IgnoreIndexLossWrapper(nn.MSELoss(reduction="none"), ignore_index), reduction=None
+        )
     elif loss == "huber":
-        base_criterion =  IgnoreIndexLossWrapper(nn.HuberLoss(reduction="none"), ignore_index)
+        base_criterion = IgnoreIndexLossWrapper(nn.HuberLoss(reduction="none"), ignore_index)
     else:
         raise ValueError(f"Loss type '{loss}' is not valid. Currently, supports 'mse', 'rmse', 'mae', or 'huber' loss.")
-    
 
     if var_weights is not None:
         check_weights_classes(var_weights, num_outputs)
         base_criterion = WeightedMultivariateLossWrapper(base_criterion, var_weights, reduction="mean")
-        
-    base_criterion = IgnoreIndexLossWrapper(base_criterion, ignore_index) 
-    
+
+    base_criterion = IgnoreIndexLossWrapper(base_criterion, ignore_index)
+
     if loss == "rmse":
         # Root after IgnoreIndex
         base_criterion = RootLossWrapper(base_criterion, reduction=None)
-    
+
     # Either weighted mean of the losses or a simple mean
     return base_criterion
-    
+
+
 def check_weights_classes(var_weights: Tensor, num_outputs: int):
     if len(var_weights) != num_outputs:
         exception_message = f"Number of weights must correspond to number of variables. Got {len(var_weights)} weights for {num_outputs} variables."
@@ -471,7 +487,6 @@ class PixelwiseRegressionTask(TerraTorchTask):
                 pass
             finally:
                 plt.close()
-            
 
     def test_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> None:
         """Compute the test loss and additional metrics.
@@ -562,7 +577,6 @@ class ScalarRegressionTask(TerraTorchTask):
         optimizer_hparams: dict | None = None,
         scheduler: str | None = None,
         scheduler_hparams: dict | None = None,
-        #
         freeze_backbone: bool = False,  # noqa: FBT001, FBT002
         freeze_decoder: bool = False,  # noqa: FBT001, FBT002
         plot_on_val: bool | int = False,
@@ -590,7 +604,7 @@ class ScalarRegressionTask(TerraTorchTask):
                 Defaults to None.
             ignore_index (int | None, optional): Label to ignore in the loss computation. Defaults to None.
             lr (float, optional): Learning rate to be used. Defaults to 0.001.
-            num_outputs (int): Number of predicted regression variables. Defaults to single regression. 
+            num_outputs (int): Number of predicted regression variables. Defaults to single regression.
             optimizer (str | None, optional): Name of optimizer class from torch.optim to be used.
                 If None, will use Adam. Defaults to None. Overriden by config / cli specification through LightningCLI.
             optimizer_hparams (dict | None): Parameters to be passed for instantiation of the optimizer.
@@ -605,7 +619,7 @@ class ScalarRegressionTask(TerraTorchTask):
             freeze_head (bool, optional): Whether to freeze the segmentation head. Defaults to False.
             plot_on_val (bool | int, optional): Whether to plot visualizations on validation.
                 If true, log every epoch. Defaults to 10. If int, will plot every plot_on_val epochs.
-            var_names (list[str] | None, optional): List of variable names passed to metrics for better naming. 
+            var_names (list[str] | None, optional): List of variable names passed to metrics for better naming.
             test_dataloaders_names (list[str] | None, optional): Names used to differentiate metrics when
                 multiple dataloaders are returned by test_dataloader in the datamodule. Defaults to None,
                 which assumes only one test dataloader is used.
@@ -618,11 +632,9 @@ class ScalarRegressionTask(TerraTorchTask):
         self.aux_loss = aux_loss
         self.aux_heads = aux_heads
         if num_outputs < 1:
-            raise ValueError("num_outputs can't be less than 1.") 
+            raise ValueError("num_outputs can't be less than 1.")
         self.num_outputs = num_outputs
-        self.var_weights = (
-            torch.Tensor(var_weights) if var_weights is not None else None
-        ) 
+        self.var_weights = torch.Tensor(var_weights) if var_weights is not None else None
 
         if model is not None and model_factory is not None:
             logger.warning("A model_factory and a model was provided. The model_factory is ignored.")
@@ -632,10 +644,7 @@ class ScalarRegressionTask(TerraTorchTask):
         if model_factory and model is None:
             self.model_factory = MODEL_FACTORY_REGISTRY.build(model_factory)
 
-        super().__init__(
-            task="scalar_regression", 
-            path_to_record_metrics=path_to_record_metrics
-            )
+        super().__init__(task="scalar_regression", path_to_record_metrics=path_to_record_metrics)
 
         if model:
             # Custom_model
@@ -657,7 +666,7 @@ class ScalarRegressionTask(TerraTorchTask):
         """
         loss = self.hparams["loss"]
         ignore_index = self.hparams["ignore_index"]
-        
+
         if isinstance(loss, str):
             # custom nn.Module type loss
             if "." in loss:
@@ -667,31 +676,31 @@ class ScalarRegressionTask(TerraTorchTask):
                 self.criterion = loss_cls()
             # Single loss
             else:
-                self.criterion = init_loss(loss, ignore_index=ignore_index) 
-            
+                self.criterion = init_loss(loss, ignore_index=ignore_index)
+
         elif isinstance(loss, nn.Module):
             # Custom loss
             self.criterion = loss
-        
+
         elif isinstance(loss, list):
             # List of losses with equal weights
-            losses = {loss: init_loss(loss, ignore_index=ignore_index)
-                      for loss in loss}
+            losses = {loss: init_loss(loss, ignore_index=ignore_index) for loss in loss}
             self.criterion = CombinedLoss(losses=losses)
         elif isinstance(loss, dict):
             # Equal weighting of losses
             loss, weight = list(loss.keys()), list(loss.values())
-            losses = {loss: init_loss(loss, ignore_index=ignore_index)
-                      for loss in loss}
+            losses = {loss: init_loss(loss, ignore_index=ignore_index) for loss in loss}
             self.criterion = CombinedLoss(losses=losses, weight=weight)
         else:
-            raise ValueError(f"The loss type {loss} isn't supported. Provide loss as string, nn.Module, list, or "
-                             f"dict[name, weights].")
-        
+            raise ValueError(
+                f"The loss type {loss} isn't supported. Provide loss as string, nn.Module, list, or "
+                f"dict[name, weights]."
+            )
 
     def configure_metrics(self) -> None:
         """Initialize the performance metrics."""
         var_names = self.hparams["var_names"]
+
         def instantiate_metrics():
             metrics = {
                 "RMSE": MeanSquaredError(num_outputs=self.num_outputs, squared=False),
@@ -699,26 +708,32 @@ class ScalarRegressionTask(TerraTorchTask):
                 "MAE": MeanAbsoluteError(num_outputs=self.num_outputs),
                 "R2_Score": R2Score(multioutput="raw_values"),
             }
-            
+
             if self.num_outputs > 1:
-                per_class_metrics = {name: ClasswiseWrapper(metric, labels=var_names, postfix=" ") for name, metric in metrics.items()}
-                
+                per_class_metrics = {
+                    name: ClasswiseWrapper(metric, labels=var_names, postfix=" ") for name, metric in metrics.items()
+                }
+
                 if self.var_weights is not None:
                     check_weights_classes(self.var_weights, self.num_outputs)
                     postfix = "weighted"
                 else:
                     postfix = "mean"
-                    
+
                 for name, metric in metrics.items():
-                    per_class_metrics[f"{name}_{postfix}"] =  WeightedMetricWrapper(metric, self.var_weights, self.num_outputs)
-                                            
+                    per_class_metrics[f"{name}_{postfix}"] = WeightedMetricWrapper(
+                        metric, self.var_weights, self.num_outputs
+                    )
+
                 return per_class_metrics
 
             return metrics
 
         def wrap_metrics_with_ignore_index(metrics):
             return {
-                name: IgnoreIndexMetricWrapper(metric, ignore_index=self.hparams["ignore_index"], num_outputs=self.num_outputs)
+                name: IgnoreIndexMetricWrapper(
+                    metric, ignore_index=self.hparams["ignore_index"], num_outputs=self.num_outputs
+                )
                 for name, metric in metrics.items()
             }
 
@@ -749,14 +764,14 @@ class ScalarRegressionTask(TerraTorchTask):
         other_keys = batch.keys() - {"image", "label", "filename"}
         rest = {k: batch[k] for k in other_keys}
         model_output: ModelOutput = self(x, **rest)
-        
+
         # loss = {"loss": tensor as weighted mean of the outputs}
-        loss = self.train_loss_handler.compute_loss(model_output, y, self.criterion, self.aux_loss) 
+        loss = self.train_loss_handler.compute_loss(model_output, y, self.criterion, self.aux_loss)
         self.train_loss_handler.log_loss(self.log, loss_dict=loss, batch_size=y.shape[0])
         y_hat = model_output.output
         self.train_metrics.update(y_hat, y)
 
-        return loss["loss"] # scalar
+        return loss["loss"]  # scalar
 
     def validation_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> None:
         """Compute the validation loss and additional metrics.
@@ -770,7 +785,7 @@ class ScalarRegressionTask(TerraTorchTask):
         y = batch["label"]
         other_keys = batch.keys() - {"image", "label", "filename"}
         rest = {k: batch[k] for k in other_keys}
-        #model_output: ModelOutput = self(x, **rest)
+        # model_output: ModelOutput = self(x, **rest)
         model_output = self.handle_full_or_tiled_inference(x, self.tiled_inference_on_validation, **rest)
 
         loss = self.val_loss_handler.compute_loss(model_output, y, self.criterion, self.aux_loss)
@@ -783,7 +798,7 @@ class ScalarRegressionTask(TerraTorchTask):
                 datamodule = self.trainer.datamodule
                 batch["prediction"] = y_hat
                 if isinstance(batch["image"], dict):
-                    rgb_modality = getattr(datamodule, 'rgb_modality', None) or list(batch["image"].keys())[0]
+                    rgb_modality = getattr(datamodule, "rgb_modality", None) or list(batch["image"].keys())[0]
                     batch["image"] = batch["image"][rgb_modality]
                 for key in ["image", "label", "prediction"]:
                     batch[key] = batch[key].cpu()

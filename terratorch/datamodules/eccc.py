@@ -1,10 +1,12 @@
 import lightning as pl
-from torch.utils.data import DataLoader
-from granitewxc.utils.config import ExperimentConfig
 from granitewxc.datasets.eccc import EcccHrdpsGdpsDataset
+from granitewxc.utils.config import ExperimentConfig
+from torch.utils.data import DataLoader
+
 
 class ECCCDataModule(pl.LightningDataModule):
     """Data module for the ECCC dataset"""
+
     def __init__(self, config: ExperimentConfig):
         super().__init__()
         self.config = config
@@ -20,7 +22,7 @@ class ECCCDataModule(pl.LightningDataModule):
 
         self.ds_kwargs = dict(
             json_static_var_path=config.data.static_data_index,
-            surface_vars=config.data.input_surface_vars, 
+            surface_vars=config.data.input_surface_vars,
             vertical_pres_vars=config.data.vertical_pres_vars,
             vertical_level1_vars=config.data.vertical_level1_vars,
             vertical_level2_vars=config.data.vertical_level2_vars,
@@ -46,9 +48,7 @@ class ECCCDataModule(pl.LightningDataModule):
                 json_file_path=self.config.data.data_test_index, **self.ds_kwargs, test=True
             )
         if stage == "val":
-            self.valid_dataset = EcccHrdpsGdpsDataset(
-                json_file_path=self.config.data.data_val_index, **self.ds_kwargs
-            )
+            self.valid_dataset = EcccHrdpsGdpsDataset(json_file_path=self.config.data.data_val_index, **self.ds_kwargs)
         if stage == "predict":
             self.predict_dataset = EcccHrdpsGdpsDataset(
                 json_file_path=self.config.data.data_test_index, **self.ds_kwargs, test=True

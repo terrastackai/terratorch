@@ -12,6 +12,7 @@ class ModelOutput:
     output: Tensor
     auxiliary_heads: dict[str, Tensor] = None
 
+
 @dataclass
 class ReconstructionOutput:
     """
@@ -23,13 +24,16 @@ class ReconstructionOutput:
         mask (Tensor, dict[str, Tensor], optional): Masked data or dictionary of predictions for multimodal data.
             Output format in pixel shape [B, H, W] or [B, T, H, W] with 0 = unmasked pixels, 1 = masked pixels.
     """
+
     loss: dict[str, Tensor]
     pred: Tensor | dict[str, Tensor]
     mask: Tensor | dict[str, Tensor] | None
 
+
 class Model(ABC, nn.Module):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+
     @abstractmethod
     def freeze_encoder(self):
         pass
@@ -44,7 +48,8 @@ class Model(ABC, nn.Module):
 
 
 class ModelFactory(typing.Protocol):
-    def build_model(self, *args, **kwargs) -> Model:...
+    def build_model(self, *args, **kwargs) -> Model: ...
+
 
 @dataclass
 class AuxiliaryHead:

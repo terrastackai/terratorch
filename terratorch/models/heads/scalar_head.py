@@ -1,7 +1,8 @@
 # Copyright contributors to the Terratorch project
 
-from torch import Tensor, nn
 import warnings
+
+from torch import Tensor, nn
 
 
 class ScalarHead(nn.Module):
@@ -21,7 +22,7 @@ class ScalarHead(nn.Module):
 
         Args:
             in_dim (int): Input dimensionality
-            num_outputs (int, optional): Number of predicted variables for regression. 
+            num_outputs (int, optional): Number of predicted variables for regression.
             num_classes (int, optional): Number of output classes for classification
             dim_list (list[int] | None, optional):  List with number of dimensions for each Linear
                 layer to be created. Defaults to None.
@@ -34,7 +35,7 @@ class ScalarHead(nn.Module):
         if num_outputs is not None and num_classes is not None:
             msg = "Both `num_outputs` and `num_classes` were provided, using `num_outputs`."
             warnings.warn(msg)
-        
+
         self.num_classes = num_classes
         self.num_outputs = num_outputs or num_classes
         self.linear_after_pool = linear_after_pool

@@ -4,10 +4,10 @@
 
 import glob
 import os
+import warnings
 from abc import ABC
 from pathlib import Path
 from typing import Any, Tuple
-import warnings
 
 import albumentations as A  # noqa: N812
 import numpy as np
@@ -94,12 +94,11 @@ class GenericScalarLabelDataset(NonGeoDataset, ImageFolder, ABC):
                     "(all bands of one timestep are stacked together). "
                     "If instead bands are grouped by channel "
                     "(all timesteps of one band are stacked together), "
-                    "set temporal_channel_major=True.")
+                    "set temporal_channel_major=True."
+                )
 
             if dataset_bands is None:
-                raise ValueError(
-                    "Please provide dataset_bands when expand_temporal_dimension=True."
-                )
+                raise ValueError("Please provide dataset_bands when expand_temporal_dimension=True.")
         if self.split_file is not None:
             with open(self.split_file) as f:
                 split = f.readlines()

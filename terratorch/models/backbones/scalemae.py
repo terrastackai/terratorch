@@ -36,9 +36,11 @@ PRETRAINED_BANDS = [
     HLSBands.BLUE,
 ]
 
+
 def register_scalemae_model(constructor: Callable):
     scalemae_model_registry[constructor.__name__] = constructor
     return constructor
+
 
 def get_1d_sincos_pos_embed_from_grid_torch(embed_dim, pos):
     """
@@ -60,23 +62,19 @@ def get_1d_sincos_pos_embed_from_grid_torch(embed_dim, pos):
     emb = torch.cat([emb_sin, emb_cos], dim=1)  # (M, D)
     return emb
 
+
 def get_2d_sincos_pos_embed_from_grid_torch(embed_dim, grid):
     assert embed_dim % 2 == 0
 
     # use half of dimensions to encode grid_h
-    emb_h = get_1d_sincos_pos_embed_from_grid_torch(
-        embed_dim // 2, grid[0]
-    )  # (H*W, D/2)
-    emb_w = get_1d_sincos_pos_embed_from_grid_torch(
-        embed_dim // 2, grid[1]
-    )  # (H*W, D/2)
+    emb_h = get_1d_sincos_pos_embed_from_grid_torch(embed_dim // 2, grid[0])  # (H*W, D/2)
+    emb_w = get_1d_sincos_pos_embed_from_grid_torch(embed_dim // 2, grid[1])  # (H*W, D/2)
 
     emb = torch.cat([emb_h, emb_w], dim=1)  # (H*W, D)
     return emb
 
-def get_2d_sincos_pos_embed_with_resolution(
-    embed_dim, grid_size, res, cls_token=False, device="cpu"
-):
+
+def get_2d_sincos_pos_embed_with_resolution(embed_dim, grid_size, res, cls_token=False, device="cpu"):
     """
     grid_size: int of the grid height and width
     res: array of size n, representing the resolution of a pixel (say, in meters),
@@ -87,24 +85,18 @@ def get_2d_sincos_pos_embed_with_resolution(
     res = res.to(device)
     grid_h = torch.arange(grid_size, dtype=torch.float32, device=device)
     grid_w = torch.arange(grid_size, dtype=torch.float32, device=device)
-    grid = torch.meshgrid(
-        grid_w, grid_h, indexing="xy"
-    )  # here h goes first,direction reversed for numpy
+    grid = torch.meshgrid(grid_w, grid_h, indexing="xy")  # here h goes first,direction reversed for numpy
     grid = torch.stack(grid, dim=0)  # 2 x h x w
 
     # grid = grid.reshape([2, 1, grid_size, grid_size])
     grid = torch.einsum("chw,n->cnhw", grid, res)  # 2 x n x h x w
     _, n, h, w = grid.shape
-    pos_embed = get_2d_sincos_pos_embed_from_grid_torch(
-        embed_dim, grid
-    )  #  # (nxH*W, D/2)
+    pos_embed = get_2d_sincos_pos_embed_from_grid_torch(embed_dim, grid)  #  # (nxH*W, D/2)
     pos_embed = pos_embed.reshape(n, h * w, embed_dim)
     if cls_token:
         pos_embed = torch.cat(
             [
-                torch.zeros(
-                    [n, 1, embed_dim], dtype=torch.float32, device=pos_embed.device
-                ),
+                torch.zeros([n, 1, embed_dim], dtype=torch.float32, device=pos_embed.device),
                 pos_embed,
             ],
             dim=1,
@@ -132,9 +124,7 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
     Vision transformer with scale-dependent position embedding.
     """
 
-    def __init__(
-        self, patch_size=16, in_chans=3, embed_dim=1024, out_indices=None, default_input_res=1, **kwargs
-    ):
+    def __init__(self, patch_size=16, in_chans=3, embed_dim=1024, out_indices=None, default_input_res=1, **kwargs):
         """
         Args:
             patch_size (int, optional): Patch size. Defaults to 16.
@@ -165,7 +155,6 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
         del self.head_drop
         del self.head
 
-
     def forward(self, x, input_res=None):
         B, _, h, w = x.shape
         x = self.patch_embed(x)
@@ -174,9 +163,7 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
             input_res = self.default_input_res
             input_res = torch.FloatTensor([input_res] * B)
 
-        num_patches = int(
-            (h * w) / (self.patch_embed.patch_size[0] * self.patch_embed.patch_size[1])
-        )
+        num_patches = int((h * w) / (self.patch_embed.patch_size[0] * self.patch_embed.patch_size[1]))
         pos_embed = get_2d_sincos_pos_embed_with_resolution(
             x.shape[-1],
             int(num_patches**0.5),
@@ -185,9 +172,7 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
             device=x.device,
         )
 
-        cls_tokens = self.cls_token.expand(
-            B, -1, -1
-        )  # stole cls_tokens impl from Phil Wang, thanks
+        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_tokens, x), dim=1)
         x = x + pos_embed
         x = self.pos_drop(x)
@@ -225,9 +210,10 @@ def vit_base_patch16(**kwargs):
         mlp_ratio=4,
         qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6),
-        **kwargs
+        **kwargs,
     )
     return model
+
 
 @register_scalemae_model
 def vit_large_patch16(**kwargs):
@@ -239,9 +225,10 @@ def vit_large_patch16(**kwargs):
         mlp_ratio=4,
         qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6),
-        **kwargs
+        **kwargs,
     )
     return model
+
 
 @register_scalemae_model
 def vit_huge_patch14(**kwargs):
@@ -253,27 +240,24 @@ def vit_huge_patch14(**kwargs):
         mlp_ratio=4,
         qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6),
-        **kwargs
+        **kwargs,
     )
     return model
 
-def load_scalemae_weights(model: nn.Module, ckpt_data: str, model_bands: list[HLSBands], input_size: int = 224) -> nn.Module:
+
+def load_scalemae_weights(
+    model: nn.Module, ckpt_data: str, model_bands: list[HLSBands], input_size: int = 224
+) -> nn.Module:
     checkpoint_model = torch.load(ckpt_data, map_location="cpu", weights_only=True)["model"]
     state_dict = model.state_dict()
 
     for k in ["head.weight", "head.bias"]:
-            if (
-                k in checkpoint_model
-                and checkpoint_model[k].shape != state_dict[k].shape
-            ):
-                logger.info(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
+        if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+            logger.info(f"Removing key {k} from pretrained checkpoint")
+            del checkpoint_model[k]
 
     if input_size != 224:
-        if (
-            "pos_embed" in checkpoint_model
-            and checkpoint_model["pos_embed"].shape != state_dict["pos_embed"].shape
-        ):
+        if "pos_embed" in checkpoint_model and checkpoint_model["pos_embed"].shape != state_dict["pos_embed"].shape:
             logger.info("Removing key pos_embed from pretrained checkpoint")
             del checkpoint_model["pos_embed"]
 
@@ -285,8 +269,9 @@ def load_scalemae_weights(model: nn.Module, ckpt_data: str, model_bands: list[HL
     return model
 
 
-
-def create_model(model_name: str, ckpt_path: str | None = None, bands: list[HLSBands | int | str] | None = None, **kwargs):
+def create_model(
+    model_name: str, ckpt_path: str | None = None, bands: list[HLSBands | int | str] | None = None, **kwargs
+):
     input_size = kwargs.pop("input_size", 224)
     try:
         constructor: Callable = scalemae_model_registry[model_name]

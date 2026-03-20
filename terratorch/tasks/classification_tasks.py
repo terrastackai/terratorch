@@ -88,7 +88,7 @@ class ClassificationTask(TerraTorchTask):
         freeze_backbone: bool = False,  # noqa: FBT001, FBT002
         freeze_decoder: bool = False,  # noqa: FBT002, FBT001
         freeze_head: bool = False,  # noqa: FBT002, FBT001
-        plot_on_val: bool | int = False, # Deactivate for classification to reduce overhead
+        plot_on_val: bool | int = False,  # Deactivate for classification to reduce overhead
         class_names: list[str] | None = None,
         test_dataloaders_names: list[str] | None = None,
         lr_overrides: dict[str, float] | None = None,
@@ -178,7 +178,6 @@ class ClassificationTask(TerraTorchTask):
         custom_loss = self.hparams["custom_loss"]
         custom_loss_kwargs = self.hparams["custom_loss_kwargs"]
 
-    
         class_weights = (
             torch.Tensor(self.hparams["class_weights"]) if self.hparams["class_weights"] is not None else None
         )
