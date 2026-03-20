@@ -71,7 +71,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
             )
         # For joint parquet/ neuco_csv, part files are written which are kept track off and are joint at the end
         if self.output_format in ("parquet_joint", "neuco_csv"):
-            self._part_idx: dict[str, int] = {f"{i:02d}": 0 for i in range(len(layers))}
+            self._part_idx = {f"{i:02d}": None for i in range(len(layers))}
             self._part_dir: dict[str, Path] = {}
 
         self.num_workers = num_workers
@@ -278,7 +278,6 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
         if not isinstance(file_ids, list):
             raise TypeError("file_ids must be a list.")
-        file_ids = [str(f) for f in file_ids]
 
         for layer, embeddings_per_layer in enumerate(embeddings):
             self.save_embeddings(embeddings_per_layer, file_ids, metadata, layer)
