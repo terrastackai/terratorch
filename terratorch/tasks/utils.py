@@ -1,7 +1,5 @@
 import importlib
-from typing import Any, Dict
-
-from torch import nn
+from typing import Any
 
 
 def get_module_and_class(path: str) -> (str, str):
@@ -59,6 +57,7 @@ def bounds_from_transform(transform, width: int, height: int) -> tuple[float, fl
 def infer_transform_and_bounds(
     center_y: float,
     center_x: float,
+    *,
     height: int,
     width: int,
     pixelsize: float,
