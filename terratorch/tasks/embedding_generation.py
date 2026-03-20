@@ -1,6 +1,7 @@
 import json
 import logging
 import warnings
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,13 +34,14 @@ class EmbeddingGenerationTask(TerraTorchTask):
         model_args: dict,
         output_dir: str = "embeddings",
         embed_file_key: str = "filename",
-        layers: list[int] = [-1],
+        layers: list[int] | None = None,
         output_format: str = "tiff",
+        *,
         has_cls: bool = False,
         embedding_pooling: str | None = None,
         num_workers: int = 4,
         pixel_size: float = 10.0,
-        freeze_backbone=True,
+        freeze_backbone: bool = True,
     ) -> None:
         """Constructor for EmbeddingGenerationTask
 
@@ -47,15 +49,20 @@ class EmbeddingGenerationTask(TerraTorchTask):
             model (str): Model name from backbone registry.
             model_args (dict, optional): Arguments passed to the model factory. Defaults to None.
             output_dir (str, optional): Directory to save embeddings. Defaults to "embeddings".
-            embed_file_key (str, optional): Identifier key for single file ids in input data, will be used as embedding identifiers. Defaults to "filename".
+            embed_file_key (str, optional): Identifier key for single file ids in input data,
+                will be used as embedding identifiers. Defaults to "filename".
             layers (list[int], optional): List of layers to extract embeddings from. Defaults to [-1].
-            output_format (str, optional): Format for saving embeddings ('tiff' for GeoTIFF, 'parquet' for GeoParquet). Defaults to "tiff".
+            output_format (str, optional): Format for saving embeddings ('tiff' for GeoTIFF, 'parquet' for GeoParquet).
+                Defaults to "tiff".
             has_cls (bool): Whether the model has a CLS token. Defaults to False.
             embedding_pooling (str | None, optional): Pooling method for embeddings. Defaults to None.
             num_workers (int, optional): Number of workers for saving embeddings. Defaults to 4.
-            pixel_size (float, optional): Pixel size in meters, only used for constructing georef bounding boxes. Defaults to 10.0.
+            pixel_size (float, optional): Pixel size in meters, only used for constructing georef bounding boxes.
+                Defaults to 10.0.
         """
         self.output_format = output_format.lower()
+        if layers is None:
+            layers = [-1]
 
         if self.output_format not in ("tiff", "parquet", "parquet_joint", "neuco_csv"):
             raise ValueError(
@@ -64,8 +71,8 @@ class EmbeddingGenerationTask(TerraTorchTask):
             )
         # For joint parquet/ neuco_csv, part files are written which are kept track off and are joint at the end
         if self.output_format in ("parquet_joint", "neuco_csv"):
-            self._part_idx = {f"{i:02d}": None for i in range(len(layers))}
-            self._part_dir = {f"{i:02d}": None for i in range(len(layers))}
+            self._part_idx: dict[str, int] = {f"{i:02d}": 0 for i in range(len(layers))}
+            self._part_dir: dict[str, Path] = {}
 
         self.num_workers = num_workers
         self._config_saved = False
@@ -87,7 +94,8 @@ class EmbeddingGenerationTask(TerraTorchTask):
                 "This may cause incompatibilities with the chosen output format."
             )
         elif embedding_pooling in (None, "None", "keep"):
-            model_args["necks"] = [{"name": "SelectIndices", "indices": self.embedding_indices}]
+            model_args["necks"] = []
+            model_args["necks"].append({"name": "SelectIndices", "indices": self.embedding_indices})
 
             if output_format == "tiff":
                 neck_cfg = {
@@ -110,7 +118,8 @@ class EmbeddingGenerationTask(TerraTorchTask):
             elif self.output_format == "parquet_joint":
                 logger.info(
                     "Joint Parquet output supports only pooled (1D) embeddings, dense embeddings will be flattened. "
-                    "Please set an embedding pooling mode (e.g., mean, max, or cls) or choose a different output format."
+                    "Please set an embedding pooling mode (e.g., mean, max, or cls) "
+                    "or choose a different output format."
                 )
         elif embedding_pooling in ["mean", "max", "min", "cls"]:
             model_args["necks"] = []
@@ -128,7 +137,9 @@ class EmbeddingGenerationTask(TerraTorchTask):
             model_args["necks"].append(neck_cfg)
 
             if self.output_format == "tiff":
-                warnings.warn("GeoTIFF output not recommended with embedding pooling, saves 1D vectors as (C,1,1).")
+                warnings.warn(
+                    "GeoTIFF output not recommended with embedding pooling, saves 1D vectors as (C,1,1).", stacklevel=2
+                )
         else:
             raise ValueError(f"EmbeddingPooling {embedding_pooling} is not supported.")
 
@@ -137,35 +148,35 @@ class EmbeddingGenerationTask(TerraTorchTask):
         self.model_factory = MODEL_FACTORY_REGISTRY.build("EncoderDecoderFactory")
         super().__init__(task="embedding_generation")
 
-    def infer_BT(self, x: torch.Tensor | dict[str, torch.Tensor]) -> tuple[int, int]:
+    def infer_bt(self, x: torch.Tensor | dict[str, torch.Tensor]) -> tuple[int, int]:
         """Infer (B, T). For 5D assume [B, C, T, H, W] as standardized by TemporalWrapper."""
         if isinstance(x, dict):
             v = next(iter(x.values()))
         else:
             v = x
-        B = v.shape[0]
-        T = v.shape[2] if v.ndim == 5 else 1
-        return B, T
+        batch_size = v.shape[0]
+        time_steps = v.shape[2] if v.ndim == 5 else 1
+        return batch_size, time_steps
 
     def check_file_ids(
         self,
         file_ids: torch.Tensor | np.ndarray | list | tuple,
         x: torch.Tensor | dict[str, torch.Tensor],
     ) -> None:
-        """Validate `file_ids` matches (B,) or (B, T) inferred from `x`."""
-        B, T = self.infer_BT(x)
+        """Validate `file_ids` matches (batch_size,) or (batch_size, time_steps)."""
+        batch_size, time_steps = self.infer_bt(x)
 
         if isinstance(file_ids, (torch.Tensor, np.ndarray)):
-            expected = (B,) if T == 1 else (B, T)
+            expected = (batch_size,) if time_steps == 1 else (batch_size, time_steps)
             if tuple(file_ids.shape) != expected:
                 raise ValueError(f"`file_ids` shape mismatch: expected {expected}, got {tuple(file_ids.shape)}")
             return
 
         if isinstance(file_ids, (list, tuple)):
-            if len(file_ids) != B:
-                raise ValueError(f"`file_ids` length mismatch: expected {B}, got {len(file_ids)}")
-            if T > 1 and isinstance(file_ids[0], (list, tuple, np.ndarray)) and len(file_ids[0]) != T:
-                raise ValueError(f"`file_ids` must have inner length {T}, got {len(file_ids[0])}")
+            if len(file_ids) != batch_size:
+                raise ValueError(f"`file_ids` length mismatch: expected {batch_size}, got {len(file_ids)}")
+            if time_steps > 1 and isinstance(file_ids[0], (list, tuple, np.ndarray)) and len(file_ids[0]) != time_steps:
+                raise ValueError(f"`file_ids` must have inner length {time_steps}, got {len(file_ids[0])}")
             return
 
         raise TypeError("`file_ids` must be a tensor/ndarray or a (nested) list/tuple")
@@ -207,7 +218,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
                     "layer_number": res + 1,
                     "layer_output_shape": list(outputs[res][0].shape),
                 }
-                for i, (folder, res) in enumerate(zip(self.embedding_indices, resolved_indices))
+                for i, (folder, res) in enumerate(zip(self.embedding_indices, resolved_indices, strict=True))
             ],
         }
 
@@ -229,7 +240,10 @@ class EmbeddingGenerationTask(TerraTorchTask):
         # Extract input image size used for later georeferencing
         if self.input_shape is None:
             if isinstance(x, dict):
-                self.input_shape = next(iter(x.values())).shape[-2:]
+                first = next(iter(x.values()))
+                if not isinstance(first, torch.Tensor):
+                    raise TypeError(f"Expected Tensor, got {type(first)}")
+                self.input_shape = first.shape[-2:]
             else:
                 self.input_shape = x.shape
 
@@ -247,6 +261,8 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
         if isinstance(file_ids, dict):
             file_ids = next(iter(file_ids.values()))
+            if not isinstance(file_ids, torch.Tensor):
+                raise TypeError(f"Expected Tensor, got {type(file_ids)}")
 
         self.check_file_ids(file_ids, x)
         embeddings = self(x)
@@ -254,6 +270,16 @@ class EmbeddingGenerationTask(TerraTorchTask):
             embeddings = [embeddings]
 
         self.save_configuration_summary(x)
+
+        if isinstance(file_ids, (torch.Tensor, np.ndarray)):
+            file_ids = file_ids.tolist()
+        elif isinstance(file_ids, tuple):
+            file_ids = list(file_ids)
+
+        if not isinstance(file_ids, list):
+            raise TypeError("file_ids must be a list.")
+        file_ids = [str(f) for f in file_ids]
+
         for layer, embeddings_per_layer in enumerate(embeddings):
             self.save_embeddings(embeddings_per_layer, file_ids, metadata, layer)
 
@@ -266,7 +292,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
     def save_embeddings(
         self,
         embedding: torch.Tensor | dict[str, torch.Tensor],
-        file_ids: list[str] | None,
+        file_ids: list[str],
         metadata: dict,
         layer: int,
     ) -> None:
@@ -274,6 +300,10 @@ class EmbeddingGenerationTask(TerraTorchTask):
         path = self.output_path / f"layer_{layer:02d}"
         if isinstance(embedding, dict):
             for modality, t in embedding.items():
+                if not isinstance(modality, str):
+                    raise TypeError(f"Expected string, got {type(modality)}")
+                if not isinstance(t, torch.Tensor):
+                    raise TypeError(f"Expected Tensor, got {type(t)}")
                 path = path / modality
                 self.write_batch(t, file_ids, metadata, path)
         elif isinstance(embedding, torch.Tensor):
@@ -337,14 +367,14 @@ class EmbeddingGenerationTask(TerraTorchTask):
         emb_np = embedding.detach().cpu().numpy()
 
         if self.output_format == "parquet_joint":
-            self.write_parquet_batch(emb_np, file_ids, metadata, is_temporal, dir_path)
+            self.write_parquet_batch(emb_np, file_ids, metadata, is_temporal=is_temporal, dir_path=dir_path)
             return
 
         if self.output_format == "neuco_csv":
             self.write_neuco_parquet_batch(emb_np, file_ids, dir_path)
             return
 
-        tasks = list(self.iter_samples(emb_np, file_ids, metadata, is_temporal))
+        tasks = list(self.iter_samples(emb_np, file_ids, metadata, is_temporal=is_temporal))
         if self.output_format == "tiff":
             writer = self.write_tiff
         elif self.output_format == "parquet":
@@ -371,22 +401,29 @@ class EmbeddingGenerationTask(TerraTorchTask):
         embedding: np.ndarray,
         file_ids: list[str] | list[list[str]],
         metadata: dict,
+        *,
         is_temporal: bool,
-    ) -> iter:
+    ) -> Iterator:
         """Yields (embedding_np, filename, metadata_sample) tuples."""
-        B = len(file_ids)
+        batch_size = len(file_ids)
 
         md = {}
-        for k, v in (metadata or {}).items():
+        for k, val in (metadata or {}).items():
+            v = val
             if torch.is_tensor(v):
                 v = v.detach().cpu().numpy()
             md[k] = v
 
-        def _select_meta(v, b: int, t: int | None, B: int, T: int | None):
+        def _select_meta(v, b: int, t: int | None, batch_size: int, time_steps: int | None):
             if isinstance(v, (list, tuple)):
-                if len(v) == B:
+                if len(v) == batch_size:
                     vb = v[b]
-                    if t is not None and T is not None and isinstance(vb, (list, tuple)) and len(vb) == T:
+                    if (
+                        t is not None
+                        and time_steps is not None
+                        and isinstance(vb, (list, tuple))
+                        and len(vb) == time_steps
+                    ):
                         return vb[t]
                     return vb
                 return v
@@ -395,9 +432,9 @@ class EmbeddingGenerationTask(TerraTorchTask):
                 return v.item()
 
             if v.ndim == 1:
-                return v[b] if v.shape[0] == B else v
+                return v[b] if v.shape[0] == batch_size else v
 
-            if v.shape[0] == B:
+            if v.shape[0] == batch_size:
                 if t is None:
                     return v[b]
                 if v.shape[1] == 1:
@@ -406,24 +443,24 @@ class EmbeddingGenerationTask(TerraTorchTask):
             return v
 
         if is_temporal:
-            for b in range(B):
-                T = len(file_ids[b])
-                for t in range(T):
+            for b in range(batch_size):
+                time_steps = len(file_ids[b])
+                for t in range(time_steps):
                     filename = file_ids[b][t]
                     meta = {}
 
                     for k, v in md.items():
-                        meta[k] = _select_meta(v, b=b, t=t, B=B, T=T)
+                        meta[k] = _select_meta(v, b=b, t=t, batch_size=batch_size, time_steps=time_steps)
 
                     arr = embedding[b, t, ...]
                     yield arr, filename, meta
         else:
-            for b in range(B):
+            for b in range(batch_size):
                 filename = file_ids[b]
                 meta = {}
 
                 for k, v in md.items():
-                    meta[k] = _select_meta(v, b=b, t=None, B=B, T=None)
+                    meta[k] = _select_meta(v, b=b, t=None, batch_size=batch_size, time_steps=None)
 
                 arr = embedding[b, ...]
                 yield arr, filename, meta
@@ -504,7 +541,17 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
             if lat is not None and lon is not None:
                 crs = "EPSG:4326"
-                b = infer_transform_and_bounds(lat, lon, *self.input_shape, self.pixel_size)
+                if self.input_shape is None:
+                    raise ValueError("input_shape must be set to infer spatial bounds.")
+
+                height, width = self.input_shape
+                b = infer_transform_and_bounds(
+                    lat,
+                    lon,
+                    height=height,
+                    width=width,
+                    pixelsize=self.pixel_size,
+                )
                 if b is not None and isinstance(b, (list, tuple)) and len(b) == 4:
                     left, bottom, right, top = [float(v) for v in b]
                     transform = from_bounds(left, bottom, right, top, profile["width"], profile["height"])
@@ -578,11 +625,22 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
             if lat is not None and lon is not None:
                 crs = "4326"
-                b = infer_transform_and_bounds(lat, lon, *self.input_shape, self.pixel_size)
+                if self.input_shape is None:
+                    raise ValueError("input_shape must be set to infer spatial bounds.")
+
+                height, width = self.input_shape
+                b = infer_transform_and_bounds(
+                    lat,
+                    lon,
+                    height=height,
+                    width=width,
+                    pixelsize=self.pixel_size,
+                )
                 if isinstance(b, (list, tuple)) and len(b) == 4:
                     bounds = tuple(float(v) for v in b)
 
-        for k, v in metadata.items():
+        for k, val in metadata.items():
+            v = val
             if isinstance(v, np.ndarray):
                 v = v.item() if v.ndim == 0 else v.tolist()
             elif hasattr(v, "item"):
@@ -602,6 +660,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
         emb_np: np.ndarray,
         file_ids: list[str],
         metadata: dict,
+        *,
         is_temporal: bool,
         dir_path: Path,
     ) -> None:
@@ -610,7 +669,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
         # In the case of temporal data, use 'iter_samples' logic to flatten the temporal and batch dimension
         if is_temporal:
-            tasks = list(self.iter_samples(emb_np, file_ids, metadata, is_temporal))
+            tasks = list(self.iter_samples(emb_np, file_ids, metadata, is_temporal=is_temporal))
             filenames, emb_list = [], []
             meta_cols = {k: [] for k in metadata.keys()}
 
@@ -626,7 +685,8 @@ class EmbeddingGenerationTask(TerraTorchTask):
             filenames = [Path(f).stem for f in file_ids]
             n = len(filenames)
             meta_cols = {}
-            for k, v in (metadata or {}).items():
+            for k, val in (metadata or {}).items():
+                v = val
                 if hasattr(v, "detach"):
                     v = v.detach().cpu().numpy()
 
@@ -643,7 +703,8 @@ class EmbeddingGenerationTask(TerraTorchTask):
             emb_2d = emb_np.reshape(emb_np.shape[0], -1)
 
         n = len(filenames)
-        if emb_2d.ndim != 2 or emb_2d.shape[0] != n:
+        expected_ndim = 2
+        if emb_2d.ndim != expected_ndim or emb_2d.shape[0] != n:
             raise ValueError(f"Expected aggregated embedding (n,d) with n=batch_size. Got {emb_2d.shape}, n={n}")
 
         df = pd.DataFrame(meta_cols)
@@ -699,7 +760,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
             except Exception:
                 is_geo = False
 
-            if is_geo:
+            if is_geo and first_gdf is not None:
                 gdfs = [first_gdf]
                 base_crs = first_gdf.crs
                 for p in parts[1:]:
@@ -743,8 +804,8 @@ class EmbeddingGenerationTask(TerraTorchTask):
             if "id" not in out.columns:
                 raise ValueError("NeuCo output missing required 'id' column.")
             dim_cols = [c for c in out.columns if c != "id"]
-            dim_cols_sorted = sorted(dim_cols, key=lambda s: int(s))  # '1','2',...
-            out = out[["id"] + dim_cols_sorted]
+            dim_cols_sorted = sorted(dim_cols, key=int)
+            out = out[["id", *dim_cols_sorted]]
 
             csv_path = self._part_dir[l_key] / "embeddings.csv"
             out.to_csv(csv_path, index=False)
@@ -765,19 +826,20 @@ class EmbeddingGenerationTask(TerraTorchTask):
         """Append/ Create NeuCo-Bench CSV (id + dim columns)."""
         dir_path.mkdir(parents=True, exist_ok=True)
 
-        if emb_np.ndim != 2:
+        expected_ndim = 2
+        if emb_np.ndim != expected_ndim:
             raise ValueError(
                 f"NeuCo-Bench CSV output requires a (B, D) array (Batch, 1D vector), got {emb_np.shape}. "
                 "Provide 'embedding_pooling' to reduce to 1D."
             )
-        B, D = emb_np.shape
-        if len(file_ids) != B:
-            raise ValueError(f"len(file_ids) must match B. Got {len(file_ids)} vs {B}")
+        batch_size, dim = emb_np.shape
+        if len(file_ids) != batch_size:
+            raise ValueError(f"len(file_ids) must match B. Got {len(file_ids)} vs {batch_size}")
 
         ids = [Path(Path(f).stem).stem for f in file_ids]
         emb_2d = np.asarray(emb_np, dtype=np.float32)
 
-        df = pd.DataFrame(emb_2d, columns=[str(i) for i in range(1, D + 1)])
+        df = pd.DataFrame(emb_2d, columns=[str(i) for i in range(1, dim + 1)])
         df.insert(0, "id", ids)
 
         # track parts per layer dir (same pattern as parquet_joint)
