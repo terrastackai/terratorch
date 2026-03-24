@@ -15,7 +15,6 @@ from terratorch.models.backbones.select_patch_embed_weights import select_patch_
 
 from terratorch.registry import TERRATORCH_BACKBONE_REGISTRY
 import torch
-import pdb
 
 class ResNetEncoderWrapper(nn.Module):
 

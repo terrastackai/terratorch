@@ -7,7 +7,6 @@ import torchvision.transforms as transforms
 from terratorch.models.heads import ScalarHead 
 from terratorch.models.model import AuxiliaryHeadWithDecoderWithoutInstantiatedHead, Model, ModelOutput
 from terratorch.models.utils import pad_images, get_image_size
-import pdb
 
 
 def freeze_module(module: nn.Module):

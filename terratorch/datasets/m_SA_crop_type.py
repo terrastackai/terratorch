@@ -15,7 +15,6 @@ from terratorch.datasets.utils import (
     default_transform,
     validate_bands,
 )
-import pdb
 
 class MSACropTypeNonGeo(NonGeoDataset):
     """NonGeo dataset implementation for [M-SA-Crop-Type](https://github.com/ServiceNow/geo-bench?tab=readme-ov-file)."""

@@ -18,7 +18,6 @@ from torch import Tensor
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib import patches
-import pdb
 
 
 class mVHR10(VHR10):
@@ -50,7 +49,6 @@ class mVHR10(VHR10):
         assert len(second_level_split_proportions) == 3
         assert np.sum(second_level_split_proportions) == 1
         self.second_level_split = second_level_split
-        # pdb.set_trace()
         df = pd.DataFrame({"ids": self.ids})
         df = df.sort_values("ids")
         df = df.sample(frac=1, random_state=123)

@@ -20,7 +20,6 @@ from torchgeo.trainers import BaseTask
 from terratorch.registry import MODEL_FACTORY_REGISTRY
 from terratorch.tasks.loss_handler import LossHandler
 from terratorch.tasks.optimizer_factory import optimizer_factory
-import pdb
 import torch
 import warnings
 from torchvision.ops import nms
@@ -368,7 +367,6 @@ class ObjectDetectionTask(BaseTask):
                 pass
 
             if fig:
-                # pdb.set_trace()
                 summary_writer = self.logger.experiment
                 if hasattr(self.logger.experiment, 'add_figure'):
                     summary_writer.add_figure(

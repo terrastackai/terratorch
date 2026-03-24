@@ -32,8 +32,6 @@ from torch import nn
 import numpy as np
 import terratorch
 
-import pdb
-
 def collate_fn_detection(batch):
     new_batch = {
         "image": [item["image"] for item in batch],
@@ -59,7 +57,6 @@ def get_transform(train, image_size=228, n_timesteps=4):
 def apply_transforms(sample, transforms):
 
 
-    # pdb.set_trace()
     sample['image'] = torch.stack(tuple(sample["image"]))
     sample['image'] = sample['image'].permute(1, 2, 0) if len(sample['image'].shape) == 3 else sample['image'].permute(0, 2, 3, 1)
     sample['image'] = np.array(sample['image'].cpu())
@@ -103,9 +100,7 @@ class Normalize(Callable):
             msg = f"Expected batch to have 5 or 4 dimensions, but got {len(image.shape)}"
             raise Exception(msg)
         batch["image"] = (image - means) / stds
-        # pdb.set_trace()
         return batch
-
 
 class IdentityTransform(nn.Module):
     def __init__(self):

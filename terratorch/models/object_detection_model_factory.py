@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from torch import nn
-import pdb
 from terratorch.models.model import (
     Model,
     ModelFactory,
@@ -20,7 +19,6 @@ from torchvision.ops import MultiScaleRoIAlign
 import numpy as np
 from functools import partial
 import torch
-import pdb
 from .utils import _get_backbone, TerratorchGeneralizedRCNNTransform
 
 SUPPORTED_TASKS = ['object_detection']
@@ -88,7 +86,6 @@ class ObjectDetectionModelFactory(ModelFactory):
         except AttributeError as e:
             msg = "backbone must have out_channels attribute"
             raise AttributeError(msg) from e
-        # pdb.set_trace()
         if necks is None:
             necks = []
         neck_list, channel_list = build_neck_list(necks, out_channels)
@@ -96,7 +93,6 @@ class ObjectDetectionModelFactory(ModelFactory):
         neck_module = NeckSequential(*neck_list)
 
         combined_backbone = BackboneWrapper(backbone, neck_module, channel_list)
-        # pdb.set_trace()
         
         if framework == 'faster-rcnn':
 

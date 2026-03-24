@@ -30,8 +30,6 @@ import torch
 from torch import nn
 import numpy as np
 
-import pdb
-
 def collate_fn_detection(batch, boxes_tag='boxes', labels_tag='labels', masks_tag='masks'):
     new_batch = {
         "image": [item["image"] for item in batch],
@@ -100,9 +98,7 @@ class Normalize(Callable):
             msg = f"Expected batch to have 5 or 4 dimensions, but got {len(image.shape)}"
             raise Exception(msg)
         batch["image"] = (image - means) / stds
-        # pdb.set_trace()
         return batch
-
 
 class IdentityTransform(nn.Module):
     def __init__(self):

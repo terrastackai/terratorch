@@ -1,5 +1,4 @@
 import gc
-import pdb
 
 import pytest
 import torch
@@ -52,7 +51,6 @@ def test_output_shape(model, dummy_input):
 
 # Test model with different image size
 def test_model_different_img_size():
-    # pdb.set_trace()
     model = DinoV3Wrapper(model="dinov3_vits16", img_size=256)
     dummy_input = torch.randn(1, 3, 256, 256)
     output = model.forward(dummy_input)

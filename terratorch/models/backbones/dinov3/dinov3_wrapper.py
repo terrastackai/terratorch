@@ -2,7 +2,6 @@ from terratorch.registry import TERRATORCH_BACKBONE_REGISTRY
 import torch
 from torch import nn
 import numpy as np
-import pdb
 from torch import Tensor
 
 

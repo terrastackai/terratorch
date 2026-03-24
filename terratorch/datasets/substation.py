@@ -24,7 +24,6 @@ from PIL import Image
 
 import pycocotools.coco
 import pycocotools
-import pdb
 import skimage
 
 import requests
