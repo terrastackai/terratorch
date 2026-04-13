@@ -79,6 +79,57 @@ You can also do this outside of config files! Simply instantiate the data module
     This has to be done as the `transforms` argument is passed through `**kwargs` in TorchGeo, making it difficult to instantiate with LightningCLI.
     See more details below.
 
+## Using Rasteret Collections
+
+TerraTorch now includes a native Rasteret integration:
+
+- `terratorch.datasets.RasteretDataset`
+- `terratorch.datamodules.RasteretDataModule`
+
+Install Rasteret support with:
+
+```bash
+pip install "terratorch[rasteret]"
+```
+
+Python usage:
+
+```python
+import rasteret
+from terratorch.datamodules import RasteretDataModule
+
+collection = rasteret.build(
+    "earthsearch/sentinel-2-l2a",
+    name="s2-example",
+    bbox=(77.5, 12.9, 77.7, 13.1),
+    date_range=("2024-01-01", "2024-03-31"),
+)
+
+datamodule = RasteretDataModule(
+    collection=collection,
+    bands=["B04", "B03", "B02"],
+    batch_size=8,
+    patch_size=256,
+    length=1000,
+)
+```
+
+Config-file usage can load a pre-built collection by name:
+
+```yaml
+data:
+  class_path: terratorch.datamodules.RasteretDataModule
+  init_args:
+    collection_name: s2-example
+    bands:
+      - B04
+      - B03
+      - B02
+    batch_size: 8
+    patch_size: 256
+    length: 1000
+```
+
 
 ## Generic datasets and data modules
 
@@ -93,6 +144,5 @@ In case you want to use TerraTorch on your specific data, we invite you to devel
 ## Transforms
 The [transforms module](../package/transforms.md) provides a set of specialized image transformations designed to manipulate spatial, temporal, and multimodal data efficiently. 
 These transformations allow for greater flexibility when working with multi-temporal, multi-channel, and multi-modal datasets, ensuring that data can be formatted appropriately for different model architectures.
-
 
 

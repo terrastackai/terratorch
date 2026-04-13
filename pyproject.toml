@@ -111,6 +111,10 @@ test = [
 #  "granitewxc",  # Currently fails of pypi version conflics
 ]
 
+rasteret = [
+  "rasteret>=0.3.7",
+]
+
 surya = [
   "numba",
   "hdf5plugin",

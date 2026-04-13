@@ -44,6 +44,8 @@
 
 :::terratorch.datasets.pastis
 
+:::terratorch.datasets.rasteret
+
 :::terratorch.datasets.sen1floods11
 
 :::terratorch.datasets.sen4agrinet

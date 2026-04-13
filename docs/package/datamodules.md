@@ -46,6 +46,8 @@
 
 :::terratorch.datamodules.pastis
 
+:::terratorch.datamodules.rasteret
+
 :::terratorch.datamodules.sen1floods11
 
 :::terratorch.datamodules.sen4agrinet

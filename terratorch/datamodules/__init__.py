@@ -30,6 +30,7 @@ from terratorch.datamodules.m_so2sat import MSo2SatNonGeoDataModule
 from terratorch.datamodules.multi_temporal_crop_classification import MultiTemporalCropClassificationDataModule
 from terratorch.datamodules.open_sentinel_map import OpenSentinelMapDataModule
 from terratorch.datamodules.pastis import PASTISDataModule
+from terratorch.datamodules.rasteret import RasteretDataModule
 
 try:
     wxc_present = True
@@ -107,6 +108,7 @@ __all__ = [
     "OpenEarthMapNonGeoDataModule",
     "OpenSentinelMapDataModule",
     "PASTISDataModule",
+    "RasteretDataModule",
     "Sen4AgriNetDataModule",
     "GenericMultiModalDataModule",
     "mVHR10DataModule",

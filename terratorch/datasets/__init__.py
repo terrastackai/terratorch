@@ -43,6 +43,7 @@ from terratorch.datasets.open_sentinel_map import OpenSentinelMap
 # miscellaneous datasets
 from terratorch.datasets.openearthmap import OpenEarthMapNonGeo
 from terratorch.datasets.pastis import PASTIS
+from terratorch.datasets.rasteret import RasteretDataset
 
 # GenericNonGeoRegressionDataset,
 from terratorch.datasets.sen1floods11 import Sen1Floods11NonGeo
@@ -100,6 +101,7 @@ __all__ = (
     "MNeonTreeNonGeo",
     "OpenSentinelMap",
     "PASTIS",
+    "RasteretDataset",
     "Sen4AgriNet",
     "WSF2019",
     "WSFEvolution",
