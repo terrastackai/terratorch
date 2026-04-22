@@ -1,6 +1,6 @@
 # Contributing
 
-This Project welcomes contributions, suggestions, and feedback. All contributions, suggestions, and feedback you submitted are accepted under the [Project's license](LICENSE). You represent that if you do not own copyright in the code that you have the authority to submit it under the [Project's license](LICENSE). All feedback, suggestions, or contributions are not confidential.
+This Project welcomes contributions, suggestions, and feedback. All contributions, suggestions, and feedback you submitted are accepted under the [Project's license](../LICENSE). You represent that if you do not own copyright in the code that you have the authority to submit it under the [Project's license](../LICENSE). All feedback, suggestions, or contributions are not confidential.
 
 The Project abides by the Organization's [code of conduct](https://github.com/torchgeo/governance/blob/main/CODE-OF-CONDUCT.md) and [trademark policy](https://github.com/torchgeo/governance/blob/main/TRADEMARKS.md).
 
