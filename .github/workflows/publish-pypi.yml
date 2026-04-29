@@ -3,47 +3,77 @@ name: Build and publish Python package
 on:
   push:
     tags:
-      - 'v*'  # Triggers on tag push
+      - 'v*'   # broad trigger, strict validation happens in job
 
 jobs:
   build-and-publish:
-    # This ensures the job only runs if the tag was pushed on the 'main' branch
-    if: github.event.base_ref == 'refs/heads/main' || github.ref_name != '' 
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 0  # required for ancestry checks
+
+      - name: Validate tag format and origin
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          echo "Tag detected: $TAG"
+
+          # Enforce strict semver: vX.Y.Z where X,Y,Z are integers
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tag format. Expected vX.Y.Z"
+            exit 1
+          fi
+
+          # Fetch main branch
+          git fetch origin main
+
+          # Check if tag commit is contained in main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tag is not on main branch"
+            exit 1
+          fi
+
+      - name: Ensure docs branch exists
+        run: |
+          git fetch origin docs:docs || true
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
-      - name: Install dependencies
+      - name: Install build + docs dependencies
         run: |
-          python -m pip install --upgrade pip build twine setuptools_scm
-          pip install mkdocs-material mike mkdocstrings[python] mkdocs-git-revision-date-localized-plugin timm
+          python -m pip install --upgrade pip
+          pip install build twine setuptools_scm
+          pip install mkdocs-material mike mkdocstrings[python] \
+                     mkdocs-git-revision-date-localized-plugin timm
 
-      - name: Build sdist and wheel
+      - name: Install package (required for mkdocstrings)
+        run: pip install -e .
+
+      - name: Build package
         run: python -m build --sdist --wheel
-        
-      - name: Deploy Documentation
+
+      - name: Build docs (sanity check)
+        run: mkdocs build --clean
+
+      - name: Deploy documentation
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-      
-          git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
-      
-          git fetch origin docs:docs || true
-      
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           mike deploy --push --update-aliases $VERSION stable
           mike set-default --push stable
-          
+
       - name: Check artifacts
         run: ls -l dist
 

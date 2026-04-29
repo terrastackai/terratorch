@@ -225,8 +225,9 @@ class Normalize(Callable):
             if len(self.means.shape) == 2:
                 # Means shape: (C, T) - use full temporal statistics
                 # Reshape to (1, C, T, 1, 1) for broadcasting
-                means = means_tensor.view(1, -1, 1, 1, 1)
-                stds = stds_tensor.view(1, -1, 1, 1, 1)
+                c, t = self.means.shape
+                means = means_tensor.view(1, c, t, 1, 1)
+                stds = stds_tensor.view(1, c, t, 1, 1)
             else:
                 # Means shape: (C,) - replicate across temporal dimension
                 # Reshape to (1, C, 1, 1, 1) for broadcasting
