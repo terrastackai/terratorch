@@ -17,10 +17,10 @@
 
 [![huggingface](https://img.shields.io/badge/Hugging_Face-join-FFD21E?logo=huggingface)](https://huggingface.co/ibm-nasa-geospatial)
 [![pypi](https://badge.fury.io/py/terratorch.svg)](https://pypi.org/project/terratorch)
-[![tests](https://github.com/terrastackai/terratorch/actions/workflows/tests.yaml/badge.svg)](https://github.com/terrastackai/terratorch/actions/workflows/tests.yaml)
-[![MkDocs](https://img.shields.io/badge/MkDocs-526CFE?logo=materialformkdocs&logoColor=fff)](https://terrastackai.github.io/terratorch/)
+[![tests](https://github.com/torchgeo/terratorch/actions/workflows/tests.yaml/badge.svg)](https://github.com/torchgeo/terratorch/actions/workflows/tests.yaml)
+[![MkDocs](https://img.shields.io/badge/MkDocs-526CFE?logo=materialformkdocs&logoColor=fff)](https://torchgeo.github.io/terratorch/)
 <!--
-![cov](https://github.com/terrastackai/terratorch/raw/main/assets/coverage-badge.svg)
+![cov](https://github.com/torchgeo/terratorch/raw/main/assets/coverage-badge.svg)
 -->
 [![PyPI Downloads](https://img.shields.io/pypi/dm/terratorch.svg?label=PyPI%20downloads)](https://pypi.org/project/terratorch/)
 [![Conda Downloads](https://img.shields.io/conda/dn/conda-forge/terratorch.svg?label=Conda%20downloads)](https://anaconda.org/conda-forge/terratorch)
@@ -121,7 +121,7 @@ This project welcomes contributions and suggestions. Ways to contribute or get i
 - Contribute via [PR](https://github.com/terrastackai/terratorch/pulls)
 - Join our [duoweekly](https://romeokienzler.medium.com/the-duoweekly-manifesto-eaa6c1f542c8) community calls taking place [Tuesdays 4:30 PM - 5 PM CEST](https://teams.microsoft.com/l/meetup-join/19%3ameeting_MWJhMThhMTMtMjc3MS00YjAyLWI3NTMtYTI0NDQ3NWY3ZGU2%40thread.v2/0?context=%7b%22Tid%22%3a%22fcf67057-50c9-4ad4-98f3-ffca64add9e9%22%2c%22Oid%22%3a%227f7ab87a-680c-4c93-acc5-fbd7ec80823a%22%7d) and [Thursdays 2:30 PM - 3 PM CEST](https://teams.microsoft.com/l/meetup-join/19%3ameeting_MWJhMThhMTMtMjc3MS00YjAyLWI3NTMtYTI0NDQ3NWY3ZGU2%40thread.v2/0?context=%7b%22Tid%22%3a%22fcf67057-50c9-4ad4-98f3-ffca64add9e9%22%2c%22Oid%22%3a%227f7ab87a-680c-4c93-acc5-fbd7ec80823a%22%7d).
 
-You can find more detailed contribution guidelines [here](https://terrastackai.github.io/terratorch/stable/contributing/). 
+You can find more detailed contribution guidelines [here](https://torchgeo.github.io/terratorch/stable/contributing/). 
 
 If you want to meet the GitHub DCO checks, you **need** to do your commits as below:
 ```
