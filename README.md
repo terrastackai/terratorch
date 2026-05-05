@@ -25,7 +25,7 @@
 [![PyPI Downloads](https://img.shields.io/pypi/dm/terratorch.svg?label=PyPI%20downloads)](https://pypi.org/project/terratorch/)
 [![Conda Downloads](https://img.shields.io/conda/dn/conda-forge/terratorch.svg?label=Conda%20downloads)](https://anaconda.org/conda-forge/terratorch)
 
-Please, read the contribution guidelines (see `Contribution` below) if you want to contribute to
+Please read the contribution guidelines (see `Contribution` below) if you want to contribute to
 TerraTorch.
 
 ## Overview
