@@ -8,7 +8,10 @@ permissions:
 jobs:
   auto-approve:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: |
+      github.event.pull_request.draft == false &&
+      contains(fromJson('["MEMBER","OWNER","COLLABORATOR"]'), github.event.pull_request.author_association) &&
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
         with:
