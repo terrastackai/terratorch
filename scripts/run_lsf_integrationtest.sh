@@ -60,7 +60,7 @@ fi
 # 3. Clone & Checkout ---
 if [ ! -d "$FULL_PATH/.git" ]; then
     echo "Cloning Terratorch into $FULL_PATH ---"
-    git clone git@github.com:terrastackai/terratorch.git "$FULL_PATH"
+    git clone git@github.com:torchgeo/terratorch.git "$FULL_PATH"
 fi
 
 cd "$FULL_PATH" || exit

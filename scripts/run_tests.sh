@@ -47,7 +47,7 @@ fi
 # 4. Clone / Checkout Logic ---
 echo "Cloning Branch: $BRANCH_NAME into $FULL_PATH ---"
 if [ ! -d "$FULL_PATH/.git" ]; then
-    git clone git@github.com:terrastackai/terratorch.git "$FULL_PATH"
+    git clone git@github.com:torchgeo/terratorch.git "$FULL_PATH"
 fi
 
 cd "$FULL_PATH" || exit

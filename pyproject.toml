@@ -156,9 +156,9 @@ vllm_test = [
 ]
 
 [project.urls]
-Documentation = "https://terrastackai.github.io/terratorch/"
-Issues = "https://github.com/terrastackai/terratorch/issues"
-Source = "https://github.com/terrastackai/terratorch"
+Documentation = "https://torchgeo.github.io/terratorch/"
+Issues = "https://github.com/torchgeo/terratorch/issues"
+Source = "https://github.com/torchgeo/terratorch"
 
 [project.scripts]
 terratorch = "terratorch.__main__:main"

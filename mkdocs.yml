@@ -71,8 +71,8 @@ extra:
     canonical_version: stable
     version_selector: true
 
-site_url: https://terrastackai.github.io/terratorch/
-repo_url: https://github.com/terrastackai/terratorch
+site_url: https://torchgeo.github.io/terratorch/
+repo_url: https://github.com/torchgeo/terratorch
 edit_uri: edit/docs/docs
 
 nav:

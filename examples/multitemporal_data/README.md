@@ -19,7 +19,7 @@ From there, you have two main modeling options:
 This folder includes a demo notebook and sample YAML for both approaches. Both examples use the same input data and task, and focus on differences in model initialization (`model_args`).
 
 - **Prithvi Multitemporal**: [`multitemporal_model_segementation_crop.ipynb`](multitemporal_model_segementation_crop.ipynb) 
-  ([Open in Colab](https://colab.research.google.com/github/terrastackai/terratorch/blob/main/examples/multitemporal_data/multitemporal_model_segementation_crop.ipynb))
+  ([Open in Colab](https://colab.research.google.com/github/torchgeo/terratorch/blob/main/examples/multitemporal_data/multitemporal_model_segementation_crop.ipynb))
 
 - **TemporalWrapper**: [`temporalwrapper_segementation_crop.ipynb`](temporalwrapper_segementation_crop.ipynb)  
-  ([Open in Colab](https://colab.research.google.com/github/terrastackai/terratorch/blob/main/examples/multitemporal_data/temporalwrapper_segementation_crop.ipynb))
+  ([Open in Colab](https://colab.research.google.com/github/torchgeo/terratorch/blob/main/examples/multitemporal_data/temporalwrapper_segementation_crop.ipynb))
