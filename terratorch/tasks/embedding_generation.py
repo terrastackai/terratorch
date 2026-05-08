@@ -40,6 +40,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
         *,
         has_cls: bool = False,
         embedding_pooling: str | None = None,
+        patch_size: int = 16,
         num_workers: int = 4,
         pixel_size: float = 10.0,
         freeze_backbone: bool = True,
@@ -77,7 +78,10 @@ class EmbeddingGenerationTask(TerraTorchTask):
                 "Supported formats are 'tiff', 'parquet', 'parquet_joint', "
                 "'neuco_csv', and 'zarr_series'."
             )
-        # For joint parquet/ neuco_csv, part files are written which are kept track off and are joint at the end
+
+        if patch_size <= 0:
+            raise ValueError(f"patch_size must be positive, got {patch_size}")
+
         if self.output_format in ("parquet_joint", "neuco_csv"):
             self._part_idx = {f"{i:02d}": None for i in range(len(layers))}
             self._part_dir: dict[str, Path] = {}
@@ -92,6 +96,7 @@ class EmbeddingGenerationTask(TerraTorchTask):
         self.embedding_indices = layers
         self.input_shape = None
         self.pixel_size = pixel_size
+        self.patch_size = patch_size
 
         model_args = model_args or {}
         if model_args.get("necks", None):
@@ -101,11 +106,16 @@ class EmbeddingGenerationTask(TerraTorchTask):
                 "automatic neck insertion and embedding aggregation are skipped. "
                 "This may cause incompatibilities with the chosen output format."
             )
-        elif embedding_pooling in (None, "None", "keep"):
-            model_args["necks"] = []
-            model_args["necks"].append({"name": "SelectIndices", "indices": self.embedding_indices})
 
-            if output_format == "tiff":
+        elif embedding_pooling in (None, "None", "keep"):
+            model_args["necks"] = [
+                {
+                    "name": "SelectIndices",
+                    "indices": self.embedding_indices,
+                }
+            ]
+
+            if self.output_format == "tiff":
                 neck_cfg = {
                     "name": "ReshapeTokensToImage",
                     "remove_cls_token": self.has_cls,
@@ -119,35 +129,62 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
                 model_args["necks"].append(neck_cfg)
                 logger.info(
-                    "GeoTIFF selected; 2D token embeddings (ViT) will be reshaped to "
+                    "GeoTIFF selected; 2D token embeddings will be reshaped to "
                     "[C, sqrt(num_tokens), sqrt(num_tokens)] after dropping CLS if present."
                 )
 
             elif self.output_format == "parquet_joint":
                 logger.info(
-                    "Joint Parquet output supports only pooled (1D) embeddings, dense embeddings will be flattened. "
-                    "Please set an embedding pooling mode (e.g., mean, max, or cls) "
-                    "or choose a different output format."
+                    "Joint Parquet output supports only pooled 1D embeddings. "
+                    "Dense embeddings will be flattened. Consider setting embedding_pooling "
+                    "to 'mean', 'max', 'min', 'cls', or 'annotated_patch'."
                 )
-        elif embedding_pooling in ["mean", "max", "min", "cls"]:
+
+        elif embedding_pooling in ("mean", "max", "min", "cls"):
             model_args["necks"] = []
+
             neck_cfg = {
                 "name": "AggregateTokens",
                 "pooling": embedding_pooling,
                 "indices": self.embedding_indices,
                 "drop_cls": has_cls,
             }
+
             if (
                 model_args.get("backbone_use_temporal", False)
                 and model_args.get("backbone_temporal_pooling", "mean") == "keep"
             ):
                 neck_cfg["temporal_inputs"] = True
+
             model_args["necks"].append(neck_cfg)
 
             if self.output_format == "tiff":
                 warnings.warn(
-                    "GeoTIFF output not recommended with embedding pooling, saves 1D vectors as (C,1,1).", stacklevel=2
+                    "GeoTIFF output is not recommended with embedding pooling; "
+                    "1D vectors are saved as (C,1,1).",
+                    stacklevel=2,
                 )
+
+        elif embedding_pooling == "annotated_patch":
+            model_args["necks"] = [
+                {
+                    "name": "SelectIndices",
+                    "indices": self.embedding_indices,
+                }
+            ]
+
+            logger.info(
+                "Annotated-patch output selected. Dense patch tokens will be extracted "
+                "and only the patch token containing the centered annotation will be saved. "
+                "The input crop must already be aligned so the annotation lies in the intended patch."
+            )
+
+            if self.output_format == "tiff":
+                warnings.warn(
+                    "GeoTIFF output with annotated_patch saves 1D vectors as (C,1,1).",
+                    stacklevel=2,
+                )
+
         else:
             raise ValueError(f"EmbeddingPooling {embedding_pooling} is not supported.")
 
@@ -155,6 +192,72 @@ class EmbeddingGenerationTask(TerraTorchTask):
         self.aux_heads = []
         self.model_factory = MODEL_FACTORY_REGISTRY.build("EncoderDecoderFactory")
         super().__init__(task="embedding_generation")
+
+    def _center_patch_token_index(self, num_tokens: int) -> int:
+        """Return token index for the center-annotated patch.
+
+        This selects the lower/right central patch for even grids.
+
+        Example:
+            224x224 crop, 16x16 patch size -> 14x14 token grid.
+            If the crop transform placed the annotation at crop pixel 120:
+
+                patch_y = 120 // 16 = 7
+                patch_x = 120 // 16 = 7
+                spatial_token_index = 7 * 14 + 7 = 105
+
+            With CLS token:
+                token_index = 1 + 105 = 106
+        """
+        cls_offset = 1 if self.has_cls else 0
+        num_spatial_tokens = num_tokens - cls_offset
+
+        if num_spatial_tokens <= 0:
+            raise ValueError(
+                f"Invalid token count: num_tokens={num_tokens}, has_cls={self.has_cls}."
+            )
+
+        grid_size = int(num_spatial_tokens**0.5)
+
+        if grid_size * grid_size != num_spatial_tokens:
+            raise ValueError(
+                f"Expected square spatial token grid, got {num_spatial_tokens} spatial tokens "
+                f"from num_tokens={num_tokens}, has_cls={self.has_cls}."
+            )
+
+        patch_y = grid_size // 2
+        patch_x = grid_size // 2
+
+        return cls_offset + patch_y * grid_size + patch_x
+
+    def select_annotated_patch(self, embedding: torch.Tensor) -> torch.Tensor:
+        """Select only the patch token containing the centered annotation.
+
+        Supported shapes:
+            (B, N, D)    -> (B, D)
+            (B, T, N, D) -> (B, T, D)
+        """
+        if not isinstance(embedding, torch.Tensor):
+            raise TypeError(f"Expected Tensor, got {type(embedding)}")
+
+        print(embedding.ndim)
+
+        if embedding.ndim == 3:
+            token_index = self._center_patch_token_index(embedding.shape[1])
+            print(token_index)
+            print(embedding.shape)
+            return embedding[:, token_index, :]
+
+        if embedding.ndim == 4:
+            token_index = self._center_patch_token_index(embedding.shape[2])
+            print(token_index)
+            print(embedding.shape)
+            return embedding[:, :, token_index, :]
+
+        raise ValueError(
+            "annotated_patch pooling expects embeddings with shape "
+            f"(B,N,D) or (B,T,N,D), got {tuple(embedding.shape)}."
+        )
 
     def infer_bt(self, x: torch.Tensor | dict[str, torch.Tensor]) -> tuple[int, int]:
         """Infer (B, T). For 5D assume [B, C, T, H, W] as standardized by TemporalWrapper."""
@@ -276,6 +379,10 @@ class EmbeddingGenerationTask(TerraTorchTask):
         embeddings = self(x)
         if not isinstance(embeddings, list):
             embeddings = [embeddings]
+
+        if self.embedding_pooling == "annotated_patch":
+            print("in annotated_patch")
+            embeddings = [self.select_annotated_patch(embedding) for embedding in embeddings]
 
         self.save_configuration_summary(x)
 
