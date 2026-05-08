@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 import torch
+import zarr
 from rasterio.errors import NotGeoreferencedWarning
 from rasterio.transform import Affine, from_bounds
 from shapely.geometry import box
@@ -52,8 +53,8 @@ class EmbeddingGenerationTask(TerraTorchTask):
             embed_file_key (str, optional): Identifier key for single file ids in input data,
                 will be used as embedding identifiers. Defaults to "filename".
             layers (list[int], optional): List of layers to extract embeddings from. Defaults to [-1].
-            output_format (str, optional): Format for saving embeddings ('tiff' for GeoTIFF, 'parquet' for GeoParquet).
-                Defaults to "tiff".
+            output_format (str, optional): Format for saving embeddings ('tiff' for GeoTIFF, 'parquet' for GeoParquet,
+                'zarr_series' for one per-sample Zarr time-series store). Defaults to "tiff".
             has_cls (bool): Whether the model has a CLS token. Defaults to False.
             embedding_pooling (str | None, optional): Pooling method for embeddings. Defaults to None.
             num_workers (int, optional): Number of workers for saving embeddings. Defaults to 4.
@@ -64,10 +65,17 @@ class EmbeddingGenerationTask(TerraTorchTask):
         if layers is None:
             layers = [-1]
 
-        if self.output_format not in ("tiff", "parquet", "parquet_joint", "neuco_csv"):
+        if self.output_format not in (
+            "tiff",
+            "parquet",
+            "parquet_joint",
+            "neuco_csv",
+            "zarr_series",
+        ):
             raise ValueError(
                 f"Unsupported output format: {self.output_format}. "
-                "Supported formats are 'tiff', 'parquet', 'parquet_joint', 'neuco_csv."
+                "Supported formats are 'tiff', 'parquet', 'parquet_joint', "
+                "'neuco_csv', and 'zarr_series'."
             )
         # For joint parquet/ neuco_csv, part files are written which are kept track off and are joint at the end
         if self.output_format in ("parquet_joint", "neuco_csv"):
@@ -341,6 +349,10 @@ class EmbeddingGenerationTask(TerraTorchTask):
             "raster_shape": ("raster_shape",),
             "center_lat": ("center_lat", "centre_lat", "lat"),
             "center_lon": ("center_lon", "centre_lon", "lon"),
+            "sample_id": ("sample_id",),
+            "frame_index": ("frame_index",),
+            "date": ("date",),
+            "zarr_path": ("zarr_path",),
         }
 
         metadata = {}
@@ -364,6 +376,10 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
         is_temporal = isinstance(file_ids[0], (list, tuple, np.ndarray))
         emb_np = embedding.detach().cpu().numpy()
+
+        if self.output_format == "zarr_series":
+            self.write_zarr_series_batch(emb_np, metadata, dir_path)
+            return
 
         if self.output_format == "parquet_joint":
             self.write_parquet_batch(emb_np, file_ids, metadata, is_temporal=is_temporal, dir_path=dir_path)
@@ -394,6 +410,120 @@ class EmbeddingGenerationTask(TerraTorchTask):
 
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             list(ex.map(write_one, tasks))
+
+    def _metadata_at(self, metadata: dict, key: str, index: int):
+        """Return one metadata value from a collated batch metadata dict."""
+        if key not in metadata:
+            raise KeyError(
+                f"zarr_series output requires metadata['{key}']. "
+                "The datamodule should return sample_id, frame_index, date, and zarr_path."
+            )
+
+        value = metadata[key]
+        if torch.is_tensor(value):
+            value = value.detach().cpu()
+            if value.ndim == 0:
+                return value.item()
+            return value[index].item()
+
+        if isinstance(value, np.ndarray):
+            if value.ndim == 0:
+                return value.item()
+            item = value[index]
+            return item.item() if hasattr(item, "item") else item
+
+        if isinstance(value, (list, tuple)):
+            item = value[index]
+            return item.item() if hasattr(item, "item") else item
+
+        return value
+
+    def _dates_from_source_zarr(self, zarr_path: str | Path) -> list[str]:
+        """Read the original frame date list from the source per-sample Zarr store."""
+        group = zarr.open_group(str(zarr_path), mode="r")
+        for key in ("s2_10m", "s2_20m", "s2_60m", "s2_scl"):
+            if key in group:
+                dates = list(group[key].attrs.get("dates") or [])
+                if dates:
+                    return dates
+        raise ValueError(f"{zarr_path}: could not find dates attrs in source Zarr store")
+
+    def write_zarr_series_batch(
+        self,
+        emb_np: np.ndarray,
+        metadata: dict,
+        dir_path: Path,
+    ) -> None:
+        """Write frame embeddings into one ordered Zarr time series per sample.
+
+        Expected input metadata comes from frame-mode dataloaders:
+        sample_id, frame_index, date, and zarr_path.
+
+        Output layout:
+            {output_dir}/layer_XX/{sample_id}.zarr/
+                attrs["sample_id"]
+                embedding              shape (T, ...)
+                embedding.attrs["dates"]
+        """
+        if emb_np.ndim < 2:
+            raise ValueError(
+                f"zarr_series expects a batched embedding array with shape (B, ...), got {emb_np.shape}"
+            )
+
+        batch_size = emb_np.shape[0]
+        for i in range(batch_size):
+            sample_id = int(self._metadata_at(metadata, "sample_id", i))
+            frame_index = int(self._metadata_at(metadata, "frame_index", i))
+            date = str(self._metadata_at(metadata, "date", i))
+            source_zarr_path = self._metadata_at(metadata, "zarr_path", i)
+
+            dates = self._dates_from_source_zarr(source_zarr_path)
+            if frame_index < 0 or frame_index >= len(dates):
+                raise IndexError(
+                    f"sample_id={sample_id}: frame_index={frame_index} outside date list of length {len(dates)}"
+                )
+            if dates[frame_index] != date:
+                raise ValueError(
+                    f"sample_id={sample_id}: date mismatch at frame_index={frame_index}. "
+                    f"metadata date={date}, source date={dates[frame_index]}"
+                )
+
+            store = dir_path / f"{sample_id}.zarr"
+            group = zarr.open_group(str(store), mode="a")
+
+            group_sample_id = group.attrs.get("sample_id")
+            if group_sample_id is not None and int(group_sample_id) != sample_id:
+                raise ValueError(
+                    f"{store}: attrs sample_id={group_sample_id} != {sample_id}"
+                )
+            group.attrs["sample_id"] = sample_id
+
+            frame_embedding = np.asarray(emb_np[i])
+            expected_shape = (len(dates), *frame_embedding.shape)
+            chunks = (1, *frame_embedding.shape)
+
+            if "embedding" not in group:
+                fill_value = np.nan if np.issubdtype(frame_embedding.dtype, np.floating) else 0
+                array = group.create_array(
+                    "embedding",
+                    shape=expected_shape,
+                    chunks=chunks,
+                    dtype=frame_embedding.dtype,
+                    fill_value=fill_value,
+                )
+                array.attrs["dates"] = dates
+            else:
+                array = group["embedding"]
+                if tuple(array.shape) != expected_shape:
+                    raise ValueError(
+                        f"{store}: existing embedding shape {array.shape} != expected {expected_shape}"
+                    )
+                existing_dates = list(array.attrs.get("dates") or [])
+                if existing_dates and existing_dates != dates:
+                    raise ValueError(f"{store}: existing embedding dates disagree with source dates")
+                array.attrs["dates"] = dates
+
+            array[frame_index] = frame_embedding
 
     def iter_samples(
         self,
