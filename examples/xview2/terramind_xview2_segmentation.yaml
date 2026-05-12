@@ -1,0 +1,294 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Train TerraMind (v1-base) on xView2 building damage assessment
+#
+# Prerequisites
+# -------------
+# 1. Run the preprocessing script to create the TerraTorch-compatible dataset:
+#
+#    python examples/xview2/prepare_xview2.py \
+#        --src /dccstor/geofm-datasets/datasets/xview2/geotiffs/tier1 \
+#        --dst /dccstor/geofm-datasets/datasets/xview2_terratorch \
+#        --compute-stats
+#
+#    Copy the printed means/stds into the `means` / `stds` fields below.
+#
+# 2. Launch training:
+#
+#    python -m terratorch fit --config examples/xview2/terramind_xview2_segmentation.yaml
+#
+# Task
+# ----
+# 5-class semantic segmentation of building damage:
+#   0 = background
+#   1 = no-damage
+#   2 = minor-damage
+#   3 = major-damage
+#   4 = destroyed
+#  -1 = un-classified  →  ignored in loss & metrics (no_label_replace=-1)
+#
+# Input
+# -----
+# 6-band int16 GeoTIFFs: bands 0-2 = pre-event RGB, bands 3-5 = post-event RGB
+# Treated as 6 selected channels of the TerraMind S2L2A modality.
+# ─────────────────────────────────────────────────────────────────────────────
+
+seed_everything: 42
+
+# ─── Data ────────────────────────────────────────────────────────────────────
+# GenericMultiModalDataModule is required for TerraMind: it returns
+# {"image": {"S2L2A": tensor}} which TerraMind routes to the correct tokeniser.
+# GenericNonGeoSegmentationDataModule returns {"image": tensor} whose key "image"
+# is not a registered TerraMind modality and would be silently discarded.
+data:
+  class_path: terratorch.datamodules.GenericMultiModalDataModule
+  init_args:
+    task: segmentation
+    batch_size: 8
+    num_workers: 4
+    num_classes: 5
+
+    # Single modality: treat the 6-band stacked file as an S2L2A image.
+    modalities:
+      - S2L2A
+
+    # All three splits share the same image/mask directories;
+    # the split .txt files control which samples each uses.
+    train_data_root:
+      S2L2A: /dccstor/geofm-datasets/datasets/xview2_terratorch/images
+    train_label_data_root: /dccstor/geofm-datasets/datasets/xview2_terratorch/masks
+    train_split: /dccstor/geofm-datasets/datasets/xview2_terratorch/splits/train.txt
+
+    val_data_root:
+      S2L2A: /dccstor/geofm-datasets/datasets/xview2_terratorch/images
+    val_label_data_root: /dccstor/geofm-datasets/datasets/xview2_terratorch/masks
+    val_split: /dccstor/geofm-datasets/datasets/xview2_terratorch/splits/val.txt
+
+    test_data_root:
+      S2L2A: /dccstor/geofm-datasets/datasets/xview2_terratorch/images
+    test_label_data_root: /dccstor/geofm-datasets/datasets/xview2_terratorch/masks
+    test_split: /dccstor/geofm-datasets/datasets/xview2_terratorch/splits/test.txt
+
+    image_grep:
+      S2L2A: "*.tif"
+    label_grep: "*.tif"
+
+    # All 6 bands are used (0-2 = pre-RGB, 3-5 = post-RGB)
+    dataset_bands:
+      S2L2A:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+    output_bands:
+      S2L2A:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+
+    # RGB visualisation from the pre-event channels
+    rgb_indices:
+      S2L2A:
+        - 0   # pre-red   → display as red
+        - 1   # pre-green → display as green
+        - 2   # pre-blue  → display as blue
+
+    # Replace nodata (-9999 after stacking) with 0
+    no_data_replace: 0.0
+    # Replace nodata in masks with -1 so they are ignored by the loss
+    no_label_replace: -1
+
+    # concat_bands: false (default) → returns {"image": {"S2L2A": tensor}}
+    # TerraMind's forward correctly receives the modality-keyed dict.
+    concat_bands: false
+
+    # ── Per-band normalisation ────────────────────────────────────────────────
+    # Replace these placeholder values with the means/stds printed by
+    # prepare_xview2.py --compute-stats.
+    # The approximate values below are representative for WorldView-2 int16
+    # xView2 imagery; actual values may differ by disaster event.
+    means:
+      S2L2A:
+        - 394.0   # pre-B0 (red)
+        - 428.0   # pre-B1 (green)
+        - 362.0   # pre-B2 (blue)
+        - 380.0   # post-B3 (red)
+        - 412.0   # post-B4 (green)
+        - 348.0   # post-B5 (blue)
+    stds:
+      S2L2A:
+        - 180.0   # pre-B0
+        - 175.0   # pre-B1
+        - 160.0   # pre-B2
+        - 185.0   # post-B3
+        - 178.0   # post-B4
+        - 164.0   # post-B5
+
+    # ── Transforms ───────────────────────────────────────────────────────────
+    # TerraMind tokeniser expects 224×224 inputs (14×14 patches at 16 px each).
+    # For 1024×1024 tiles, a random crop during training provides implicit data
+    # augmentation and avoids loading the full tile into the GPU.
+    # shared_transforms: true (default) applies the same spatial transform to
+    # all image modalities and the mask simultaneously.
+    shared_transforms: true
+
+    train_transform:
+      - class_path: albumentations.RandomCrop
+        init_args:
+          height: 224
+          width: 224
+      - class_path: albumentations.D4
+        init_args:
+          p: 1.0
+      - class_path: albumentations.pytorch.transforms.ToTensorV2
+        init_args:
+          transpose_mask: false
+
+    val_transform:
+      - class_path: albumentations.CenterCrop
+        init_args:
+          height: 224
+          width: 224
+      - class_path: albumentations.pytorch.transforms.ToTensorV2
+        init_args:
+          transpose_mask: false
+
+    test_transform:
+      - class_path: albumentations.CenterCrop
+        init_args:
+          height: 224
+          width: 224
+      - class_path: albumentations.pytorch.transforms.ToTensorV2
+        init_args:
+          transpose_mask: false
+
+    allow_substring_file_names: true
+    drop_last: true
+
+# ─── Model ───────────────────────────────────────────────────────────────────
+model:
+  class_path: terratorch.tasks.SemanticSegmentationTask
+  init_args:
+    model_factory: EncoderDecoderFactory
+    model_args:
+      # TerraMind v1-base with a single S2L2A modality.
+      # The six input bands are treated as a subset of the pretrained 12-band
+      # S2L2A tokeniser; select_modality_patch_embed_weights adapts the patch
+      # projection layer automatically.
+      backbone: terramind_v1_base
+      backbone_pretrained: true
+      backbone_modalities:
+        - S2L2A
+      backbone_bands:
+        S2L2A:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+
+      necks:
+        - name: SelectIndices
+          indices:
+            - 2
+            - 5
+            - 8
+            - 11
+        - name: ReshapeTokensToImage
+          remove_cls_token: false
+        - name: LearnedInterpolateToPyramidal
+
+      decoder: UNetDecoder
+      decoder_channels:
+        - 512
+        - 256
+        - 128
+        - 64
+
+      head_dropout: 0.1
+      num_classes: 5
+
+    # Cross-entropy handles multi-class imbalance better than dice for this task
+    loss: ce
+    ignore_index: -1
+
+    freeze_backbone: false
+    freeze_decoder: false
+    freeze_head: false
+
+    # Log mIoU and per-class IoU for the 5 damage classes
+    metrics:
+      val:
+        - class_path: torchmetrics.ClasswiseWrapper
+          init_args:
+            metric:
+              class_path: torchmetrics.JaccardIndex
+              init_args:
+                task: multiclass
+                num_classes: 5
+                ignore_index: -1
+                average: none
+            labels:
+              - background
+              - no-damage
+              - minor-damage
+              - major-damage
+              - destroyed
+        - class_path: torchmetrics.JaccardIndex
+          init_args:
+            task: multiclass
+            num_classes: 5
+            ignore_index: -1
+            average: macro
+
+    plot_on_val: 5
+    tiled_inference_parameters:
+      h_crop: 224
+      w_crop: 224
+      h_stride: 192
+      w_stride: 192
+      average_patches: true
+      batch_size: 16
+
+# ─── Optimizer & LR scheduler ────────────────────────────────────────────────
+optimizer:
+  class_path: torch.optim.AdamW
+  init_args:
+    lr: 6.0e-5
+    weight_decay: 0.05
+
+lr_scheduler:
+  class_path: torch.optim.lr_scheduler.CosineAnnealingLR
+  init_args:
+    T_max: 100
+    eta_min: 1.0e-7
+
+# ─── Trainer ─────────────────────────────────────────────────────────────────
+trainer:
+  accelerator: auto
+  devices: auto
+  strategy: auto
+  precision: 16-mixed
+  max_epochs: 100
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 20
+  accumulate_grad_batches: 2   # effective batch size = 8 × 2 = 16
+  num_nodes: 1
+  use_distributed_sampler: true
+  enable_checkpointing: true
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.RichProgressBar
+    - class_path: lightning.pytorch.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: epoch
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val/loss
+        mode: min
+        save_top_k: 3
+        filename: "terramind-xview2-{epoch:03d}-{val/loss:.4f}"
