@@ -77,12 +77,12 @@ class TestOlmoEarthBackbone:
 
         model = OlmoEarthBackbone(
             model_id="OlmoEarth-v1-Nano",
-            embed_dim=64,
+            embed_dim=128,
             pretrained=False,
         )
         assert model is not None
-        assert model.embed_dim == 64
-        assert model.out_channels == [64]
+        assert model.embed_dim == 128
+        assert model.out_channels == [128]
         gc.collect()
 
     @skip_no_olmoearth
@@ -92,7 +92,7 @@ class TestOlmoEarthBackbone:
 
         model = OlmoEarthBackbone(
             model_id="OlmoEarth-v1-Nano",
-            embed_dim=64,
+            embed_dim=128,
             pretrained=False,
             patch_size=8,
         )
@@ -104,7 +104,7 @@ class TestOlmoEarthBackbone:
         assert isinstance(outputs, list)
         assert len(outputs) == 1
         # With patch_size=8 and input 64x64, expect 8x8 spatial output
-        assert outputs[0].shape == (1, 64, 8, 8)
+        assert outputs[0].shape == (1, 128, 8, 8)
         gc.collect()
 
     @skip_no_olmoearth
@@ -114,7 +114,7 @@ class TestOlmoEarthBackbone:
 
         model = OlmoEarthBackbone(
             model_id="OlmoEarth-v1-Nano",
-            embed_dim=64,
+            embed_dim=128,
             pretrained=False,
             patch_size=8,
         )
@@ -124,7 +124,7 @@ class TestOlmoEarthBackbone:
             outputs = model(x)
             expected_h = h // 8
             expected_w = w // 8
-            assert outputs[0].shape == (1, 64, expected_h, expected_w), (
+            assert outputs[0].shape == (1, 128, expected_h, expected_w), (
                 f"Wrong shape for input ({h}, {w})"
             )
         gc.collect()
@@ -136,7 +136,7 @@ class TestOlmoEarthBackbone:
 
         model = TERRATORCH_BACKBONE_REGISTRY.build("olmoearth_v1_nano", pretrained=False)
         assert model is not None
-        assert model.embed_dim == 64
+        assert model.embed_dim == 128
         gc.collect()
 
     @skip_no_olmoearth

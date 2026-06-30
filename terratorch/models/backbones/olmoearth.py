@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 OLMOEARTH_CONFIGS: dict[str, dict] = {
     "olmoearth_v1_nano": {
         "model_id": "OlmoEarth-v1-Nano",
-        "embed_dim": 64,
+        "embed_dim": 128,
     },
     "olmoearth_v1_tiny": {
         "model_id": "OlmoEarth-v1-Tiny",
@@ -81,12 +81,13 @@ class OlmoEarthBackbone(nn.Module):
 
     This wrapper loads an OlmoEarth model (encoder only) and adapts its
     forward pass to produce a list of feature maps compatible with TerraTorch
-    decoders. The encoder's output embeddings are reshaped from (B, N, D) token
-    sequences to (B, D, H, W) spatial feature maps.
+    decoders. The encoder outputs per-patch token embeddings which are reshaped
+    into (B, D, H', W') spatial feature maps.
 
     OlmoEarth's native interface expects a MaskedOlmoEarthSample input with
-    multi-modal data. This wrapper provides a simplified interface that accepts
-    a standard image tensor (B, C, H, W) and wraps it as Sentinel-2 input.
+    multi-modal data in [B, H, W, T, C] format. This wrapper provides a
+    simplified interface that accepts a standard image tensor (B, C, H, W) and
+    wraps it as Sentinel-2 L2A input.
     """
 
     def __init__(
@@ -96,7 +97,7 @@ class OlmoEarthBackbone(nn.Module):
         pretrained: bool = True,
         patch_size: int = 8,
         input_res: int = 10,
-        modality: str = "sentinel2",
+        modality: str = "sentinel2_l2a",
         ckpt_path: str | None = None,
     ):
         """Initialize OlmoEarth backbone.
@@ -107,14 +108,15 @@ class OlmoEarthBackbone(nn.Module):
             pretrained: Whether to load pretrained weights from HuggingFace
             patch_size: Patch size for tokenization (default 8)
             input_res: Input resolution in meters (default 10m for Sentinel-2)
-            modality: Input modality name (default "sentinel2")
+            modality: Input modality name matching MaskedOlmoEarthSample fields
+                (default "sentinel2_l2a")
             ckpt_path: Optional path to a local checkpoint file
         """
         super().__init__()
 
+        from olmoearth_pretrain.data.constants import Modality as ModalitySpec
         from olmoearth_pretrain.model_loader import ModelID, load_model_from_id, load_model_from_path
 
-        self.embed_dim = embed_dim
         self.patch_size = patch_size
         self.input_res = input_res
         self.modality = modality
@@ -129,8 +131,15 @@ class OlmoEarthBackbone(nn.Module):
         # Extract only the encoder
         self.encoder = full_model.encoder
 
+        # Use the encoder's actual embedding size as the authoritative embed_dim
+        self.embed_dim = self.encoder.embedding_size
+
+        # Determine number of band sets for this modality (needed for mask shape)
+        modality_spec = ModalitySpec.get(self.modality)
+        self.num_band_sets = len(modality_spec.band_sets)
+
         # Expose embedding dimension for downstream components
-        self.num_features = embed_dim
+        self.num_features = self.embed_dim
 
     @property
     def out_channels(self) -> list[int]:
@@ -161,39 +170,29 @@ class OlmoEarthBackbone(nn.Module):
         h_patches = H // self.patch_size
         w_patches = W // self.patch_size
 
-        # Create a MaskedOlmoEarthSample wrapping the input as the specified modality.
-        # OlmoEarth expects input shape: (B, H_patches, W_patches, T, BandSets, C_per_bandset, patch_size, patch_size)
-        # For single-timestep, single-band-set usage:
-        # Reshape input: (B, C, H, W) -> (B, h_patches, w_patches, 1, 1, C, patch_size, patch_size)
-        x_patchified = x.unfold(2, self.patch_size, self.patch_size).unfold(
-            3, self.patch_size, self.patch_size
-        )
-        # x_patchified: (B, C, h_patches, w_patches, patch_size, patch_size)
-        x_patchified = x_patchified.permute(0, 2, 3, 1, 4, 5)
-        # x_patchified: (B, h_patches, w_patches, C, patch_size, patch_size)
-        x_patchified = x_patchified.unsqueeze(3).unsqueeze(4)
-        # x_patchified: (B, h_patches, w_patches, 1, 1, C, patch_size, patch_size)
+        # OlmoEarth expects raw pixel data in [B, H, W, T, C] format.
+        # Reshape from (B, C, H, W) -> (B, H, W, T=1, C)
+        x_bhwtc = x.permute(0, 2, 3, 1).unsqueeze(3)  # (B, H, W, 1, C)
 
-        # Create mask: all tokens are visible (ONLINE_ENCODER value)
+        # Create mask at pixel resolution: [B, H, W, T, num_band_sets]
+        # All tokens visible (ONLINE_ENCODER)
         mask = torch.full(
-            (B, h_patches, w_patches, 1, 1),
+            (B, H, W, 1, self.num_band_sets),
             fill_value=MaskValue.ONLINE_ENCODER.value,
             device=x.device,
             dtype=torch.long,
         )
 
-        # Construct timestamps (single timestep, zeros)
-        timestamps = torch.zeros(B, 1, device=x.device, dtype=torch.float32)
+        # Construct timestamps: [B, T, 3] with [day, month, year] as long
+        timestamps = torch.zeros(B, 1, 3, device=x.device, dtype=torch.long)
 
-        # Build the sample
-        sample_dict = {
-            self.modality: x_patchified,
+        # Build the MaskedOlmoEarthSample with the correct field names
+        sample_kwargs = {
+            "timestamps": timestamps,
+            self.modality: x_bhwtc,
             f"{self.modality}_mask": mask,
         }
-        sample = MaskedOlmoEarthSample(
-            timestamps=timestamps,
-            **sample_dict,
-        )
+        sample = MaskedOlmoEarthSample(**sample_kwargs)
 
         # Run encoder
         encoder_output = self.encoder(
@@ -202,40 +201,16 @@ class OlmoEarthBackbone(nn.Module):
             input_res=self.input_res,
         )
 
-        # Extract the projected/aggregated embeddings
-        # The encoder returns a dict with 'project_aggregated' containing per-patch embeddings
-        # Shape: (B, h_patches, w_patches, embed_dim)
-        proj_agg = encoder_output["project_aggregated"]
+        # Extract spatial token embeddings from tokens_and_masks.
+        # Shape: (B, H_patches, W_patches, T, band_sets, D)
+        tokens_and_masks = encoder_output["tokens_and_masks"]
+        modality_tokens = getattr(tokens_and_masks, self.modality)
 
-        # proj_agg is a Tensor of shape (B, h_patches * w_patches, embed_dim)
-        # or it may come from TokensAndMasks - extract the modality tokens
-        if hasattr(proj_agg, "as_tensor"):
-            features = proj_agg.as_tensor()
-        elif isinstance(proj_agg, dict):
-            # Get the first available modality
-            features = next(iter(proj_agg.values()))
-            if features.ndim > 3:
-                features = features.flatten(1, -2)
-        elif isinstance(proj_agg, Tensor):
-            features = proj_agg
-        else:
-            # Fallback: try to get tokens from tokens_and_masks
-            tokens_and_masks = encoder_output["tokens_and_masks"]
-            modality_tokens = getattr(tokens_and_masks, self.modality, None)
-            if modality_tokens is not None:
-                # Shape: (B, h, w, t, bs, D) -> flatten spatial
-                features = modality_tokens.flatten(1, -2)
-            else:
-                msg = f"Could not extract features from OlmoEarth encoder output: {type(proj_agg)}"
-                raise RuntimeError(msg)
+        # Average over T and band_sets dims to get (B, H', W', D)
+        features = modality_tokens.mean(dim=(3, 4))
 
-        # Reshape from (B, N, D) to (B, D, H', W')
-        if features.ndim == 3:
-            features = features[:, : h_patches * w_patches, :]
-            features = features.permute(0, 2, 1).reshape(B, self.embed_dim, h_patches, w_patches)
-        elif features.ndim == 4:
-            # Already (B, H', W', D) format
-            features = features.permute(0, 3, 1, 2)
+        # Reshape to (B, D, H', W') for compatibility with TerraTorch decoders
+        features = features.permute(0, 3, 1, 2)
 
         return [features]
 
@@ -245,7 +220,7 @@ def _create_olmoearth_backbone(
     pretrained: bool = True,
     patch_size: int = 8,
     input_res: int = 10,
-    modality: str = "sentinel2",
+    modality: str = "sentinel2_l2a",
     ckpt_path: str | None = None,
     **kwargs,
 ) -> OlmoEarthBackbone:
