@@ -152,7 +152,6 @@ geobenchv2 = [
 ]
 
 vllm = [
-  "geobenchv2>=0.9",
   "impactmesh>0.1.0",
   "vllm>=0.19.0",
 ]
