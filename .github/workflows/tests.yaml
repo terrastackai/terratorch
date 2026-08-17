@@ -119,6 +119,7 @@ jobs:
         run: |
           pip install pip==25.1
           pip --version
+          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
           pip install -e .[test,olmoearth]
       - name: Test OlmoEarth integration
         run: |
