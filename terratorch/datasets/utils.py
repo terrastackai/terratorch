@@ -212,7 +212,9 @@ def clip_image(img: np.ndarray) -> np.ndarray:
 
 def clip_image_percentile(img: np.ndarray, q_lower: float = 1, q_upper: float = 99) -> np.ndarray:
     """Remove values outside percentile range [lower, upper] and rescale image.
-       Based on torchgeo.datasets.utils.percentile_normalization().
+
+    Standalone numpy implementation based on ``np.percentile``; intentionally
+    independent of torchgeo's normalization helpers.
 
     Args:
         img (np.ndarray): image in the format HWC.

@@ -9,7 +9,7 @@ import pandas as pd
 import torch
 from lightning.pytorch.callbacks import Callback
 from torchgeo.datasets.utils import unbind_samples
-from torchgeo.trainers import BaseTask
+from torchgeo.tasks import BaseTask
 
 from terratorch.models.model import Model, ModelOutput
 from terratorch.tasks.optimizer_factory import optimizer_factory

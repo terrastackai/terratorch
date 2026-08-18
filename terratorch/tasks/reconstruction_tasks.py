@@ -5,7 +5,7 @@ import torch
 from lightning.pytorch.callbacks import Callback
 from torch import nn
 from torchgeo.datasets.utils import unbind_samples
-from torchgeo.trainers import BaseTask
+from torchgeo.tasks import BaseTask
 from torchmetrics import MeanAbsoluteError, MeanSquaredError, MetricCollection
 
 from terratorch.models.model import Model, ReconstructionOutput
