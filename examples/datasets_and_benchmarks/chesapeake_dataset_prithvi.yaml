@@ -87,7 +87,6 @@ model:
         - 11
       decoder: UperNetDecoder
       decoder_channels: 128
-      decoder_scale_modules: true
       backbone_bands:
       - RED
       - GREEN
