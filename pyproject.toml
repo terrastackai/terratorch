@@ -109,6 +109,7 @@ test = [
   "hdf5plugin",
   "h5netcdf",
   "terratorch-surya>=0.1.0",
+  "tacoreader>=2.4.0",
 #  "PrithviWxC",  # Currently fails of pypi version conflics
 #  "granitewxc",  # Currently fails of pypi version conflics
 ]
