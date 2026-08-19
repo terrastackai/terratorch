@@ -56,7 +56,7 @@ jobs:
         run: |
           pip install pip==25.1
           pip --version
-          pip install -e .[test]
+          pip install -e .[test] -c constraints/test-py313.txt
       - name: List pip dependencies
         run: pip list
       - name: Test with pytest (fast)
@@ -89,7 +89,7 @@ jobs:
         run: |
           pip install pip==25.1
           pip --version
-          pip install -e .[test]
+          pip install -e .[test] -c constraints/test-py313.txt
       - name: Test with pytest (slow)
         run: |
           pytest -s -v -m "slow" tests
@@ -119,7 +119,7 @@ jobs:
         run: |
           pip install pip==25.1
           pip --version
-          pip install -e .[test,rfdetr]
+          pip install -e .[test,rfdetr] -c constraints/test-py313.txt
       - name: Test RF-DETR integration
         run: |
           pytest -s -v tests/test_detr.py -k "rfdetr"
