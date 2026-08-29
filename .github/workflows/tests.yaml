@@ -92,7 +92,10 @@ jobs:
           pip install -e .[test,tortilla] -c constraints/test-py313.txt
       - name: Test with pytest (slow)
         run: |
-          pytest -s -v -m "slow" tests
+          # pytest exit code 5 == "no tests collected". The only slow-marked tests
+          # (test_detr.py) require the rfdetr extra and run in the rfdetr-tests job,
+          # so nothing is selected here; treat 5 as success instead of failing the job.
+          pytest -s -v -m "slow" tests || [ "$?" -eq 5 ]
 
   rfdetr-tests:
     environment: cicd

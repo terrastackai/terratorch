@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import copy
-import datetime
 import logging
 import os
 import tempfile
@@ -319,7 +318,7 @@ class SegmentationIOProcessor(IOProcessor):
                     if len(julian_day) == 3:
                         julian_day = int(julian_day)
                     else:
-                        julian_day = datetime.datetime.strptime(julian_day, "%m%d").timetuple().tm_yday
+                        julian_day = datetime.strptime(julian_day, "%m%d").timetuple().tm_yday
                     temporal_coords.append([year, julian_day])
             except Exception:
                 logger.exception("Could not extract timestamp for %s", file)
