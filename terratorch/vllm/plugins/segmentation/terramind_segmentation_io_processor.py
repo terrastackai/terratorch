@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import copy
 
@@ -27,7 +27,7 @@ from terratorch.vllm.utils import check_vllm_version
 if check_vllm_version("0.16.0", ">"):
     from vllm.renderers import BaseRenderer
 
-from .utils import download_file_async, get_filename_from_url, path_or_tmpdir, to_base64_tiff
+from .utils import download_file_sync, get_filename_from_url, path_or_tmpdir, to_base64_tiff
 
 from .types import PluginConfig, RequestData, RequestOutput, TerramindSegmentationRequestInfo, TiledInferenceParameters
 
@@ -117,20 +117,21 @@ class TerramindSegmentationIOProcessor(IOProcessor):
 
         return data_module_config
 
-    async def _download_input_data(self, dataset_path: str, request_data: dict):
-
-        # I am assuming the user to provide me with one url for each input modality
-        download_tasks = []
-        # with TemporaryDirectory(delete=False) as temp_dir:
+    def _download_input_data(self, dataset_path: str, request_data: dict):
+        # One thread per modality — downloads are I/O-bound so the GIL is
+        # released during the blocking socket read, giving true parallelism.
         dir_path = Path(dataset_path)
-        for modality, url in request_data.items():
+
+        def _download_one(modality: str, url: str) -> None:
             modality_dir = dir_path / modality
             modality_dir.mkdir()
             dest_file = modality_dir / get_filename_from_url(url)
-            task = asyncio.create_task(download_file_async(url, dest_file))
-            download_tasks.append(task)
+            download_file_sync(url, dest_file)
 
-        await asyncio.gather(*download_tasks)
+        with ThreadPoolExecutor() as pool:
+            futures = [pool.submit(_download_one, mod, url) for mod, url in request_data.items()]
+            for f in as_completed(futures):
+                f.result()  # re-raises any download exception
 
     def parse_request(self, request: Any) -> IOProcessorInput:
         logger.warning(
@@ -168,16 +169,6 @@ class TerramindSegmentationIOProcessor(IOProcessor):
         request_id: Optional[str] = None,
         **kwargs,
     ) -> Union[PromptType, Sequence[PromptType]]:
-        # Just run the async function froma. synchronous context.
-        # Since we are already in the vLLM server event loop we use that one.
-        return asyncio.run(self.pre_process_async(prompt, request_id, **kwargs))
-
-    async def pre_process_async(
-        self,
-        prompt: IOProcessorInput,
-        request_id: Optional[str] = None,
-        **kwargs,
-    ) -> Union[PromptType, Sequence[PromptType]]:
 
         request_data = RequestData.model_validate(prompt)
 
@@ -194,7 +185,7 @@ class TerramindSegmentationIOProcessor(IOProcessor):
 
         with path_or_tmpdir(request_data) as dataset_path:
             if input_data_format == "url":
-                await self._download_input_data(dataset_path, request_data=request_data.data)
+                self._download_input_data(dataset_path, request_data=request_data.data)
 
             # set the datamodule data_root to where the dataset is located
             datamodule_config["init_args"]["predict_data_root"] = dataset_path
@@ -254,6 +245,14 @@ class TerramindSegmentationIOProcessor(IOProcessor):
         )
 
         return prompts
+
+    async def pre_process_async(
+        self,
+        prompt: IOProcessorInput,
+        request_id: Optional[str] = None,
+        **kwargs,
+    ) -> Union[PromptType, Sequence[PromptType]]:
+        return self.pre_process(prompt, request_id, **kwargs)
 
     def post_process(
         self,
